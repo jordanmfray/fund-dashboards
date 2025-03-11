@@ -45,6 +45,7 @@ enum QuestionType {
 model User {
   id                Int                  @id @default(autoincrement())
   name              String
+  profile           Json?                // Flexible JSON data storage for beneficiary profile
   sessions          Session[]            // One-to-many relation with Session
   applications      Application[]        // One-to-many relation with Application
   milestoneReflections MilestoneReflection[] // One-to-many relation with MilestoneReflection
@@ -70,7 +71,6 @@ model Fund {
 // Session model - represents progress through a program and a scholarship from a fund
 model Session {
   id                Int                  @id @default(autoincrement())
-  title             String
   status            SessionStatus        @default(IN_PROGRESS)
   outcomeData       Json                 // Flexible JSON data storage for various data types
   fund              Fund                 @relation(fields: [fundId], references: [id])
