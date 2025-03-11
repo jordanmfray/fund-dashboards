@@ -13,32 +13,219 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Page model - represents content pages
-model Page {
-  id          Int       @id @default(autoincrement())
-  title       String
-  slug        String    @unique
-  content     String
-  isPublished Boolean   @default(false)
-  viewCount   Int       @default(0)
-  authorName  String    // Author name as a string
-  authorEmail String?   // Optional author email
-  tags        Tag[]     // Many-to-many relation with Tag
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-}
-
-// Tag model - for categorizing pages
-model Tag {
-  id        Int      @id @default(autoincrement())
-  name      String   @unique
-  pages     Page[]   // Many-to-many relation with Page
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
 // User role enum
 enum Role {
   USER
   ADMIN
+  FUND_MANAGER
+}
+
+// Session status enum
+enum SessionStatus {
+  IN_PROGRESS
+  COMPLETED
+}
+
+// Survey type enum
+enum SurveyType {
+  PRE
+  POST
+}
+
+// Question type enum
+enum QuestionType {
+  MULTIPLE_CHOICE
+  CHECKBOX
+  TEXT
+  RATING
+  SCALE
+}
+
+// User model - represents application users
+model User {
+  id                Int                  @id @default(autoincrement())
+  name              String
+  sessions          Session[]            // One-to-many relation with Session
+  applications      Application[]        // One-to-many relation with Application
+  milestoneReflections MilestoneReflection[] // One-to-many relation with MilestoneReflection
+  surveyResponses   SurveyResponse[]     // One-to-many relation with SurveyResponse
+  ratings           Rating[]             // One-to-many relation with Rating
+  reviews           Review[]             // One-to-many relation with Review
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+}
+
+// Fund model - represents investment funds
+model Fund {
+  id            Int       @id @default(autoincrement())
+  name          String
+  description   String
+  totalAmount   Float
+  programs      Program[] // Many-to-many relation with Program
+  sessions      Session[] // One-to-many relation with Session
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+// Session model - represents progress through a program and a scholarship from a fund
+model Session {
+  id                Int                  @id @default(autoincrement())
+  title             String
+  status            SessionStatus        @default(IN_PROGRESS)
+  outcomeData       Json                 // Flexible JSON data storage for various data types
+  fund              Fund                 @relation(fields: [fundId], references: [id])
+  fundId            Int
+  program           Program              @relation(fields: [programId], references: [id])
+  programId         Int
+  user              User                 @relation(fields: [userId], references: [id])
+  userId            Int
+  application       Application?         // One-to-one relation with Application
+  surveyResponses   SurveyResponse[]     // One-to-many relation with SurveyResponse
+  milestoneReflections MilestoneReflection[] // One-to-many relation with MilestoneReflection
+  rating            Rating?              // One-to-one relation with Rating
+  review            Review?              // One-to-one relation with Review
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  // Ensure a user can have only one session in a program at a time
+  @@unique([userId, programId])
+}
+
+// Program model - represents educational or impact programs
+model Program {
+  id                Int                  @id @default(autoincrement())
+  name              String               @unique
+  description       String
+  funds             Fund[]               // Many-to-many relation with Fund
+  sessions          Session[]            // One-to-many relation with Session
+  surveys           Survey[]             // One-to-many relation with Survey
+  milestones        Milestone[]          // One-to-many relation with Milestone
+  applicationTemplate Json?              // JSON template for application questions
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+}
+
+// Survey model - represents pre and post surveys
+model Survey {
+  id                Int                  @id @default(autoincrement())
+  title             String
+  description       String
+  type              SurveyType           // PRE or POST
+  programs          Program[]            // Many-to-many relation with Program
+  questions         Question[]           // One-to-many relation with Question
+  responses         SurveyResponse[]     // One-to-many relation with SurveyResponse
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+}
+
+// Question model - represents survey questions
+model Question {
+  id                Int                  @id @default(autoincrement())
+  text              String
+  type              QuestionType
+  options           Json?                // For multiple choice/checkbox questions
+  required          Boolean              @default(false)
+  order             Int                  // For ordering questions in the survey
+  survey            Survey               @relation(fields: [surveyId], references: [id])
+  surveyId          Int
+  responses         QuestionResponse[]   // One-to-many relation with QuestionResponse
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  @@unique([surveyId, order])  // Ensure unique ordering within a survey
+}
+
+// SurveyResponse model - represents a user's response to a survey
+model SurveyResponse {
+  id                Int                  @id @default(autoincrement())
+  survey            Survey               @relation(fields: [surveyId], references: [id])
+  surveyId          Int
+  session           Session              @relation(fields: [sessionId], references: [id])
+  sessionId         Int
+  user              User                 @relation(fields: [userId], references: [id])
+  userId            Int
+  questionResponses QuestionResponse[]   // One-to-many relation with QuestionResponse
+  completedAt       DateTime             @default(now())
+
+  @@unique([surveyId, sessionId])  // Ensure one response per survey per session
+}
+
+// QuestionResponse model - represents a user's response to a specific question
+model QuestionResponse {
+  id                Int                  @id @default(autoincrement())
+  question          Question             @relation(fields: [questionId], references: [id])
+  questionId        Int
+  surveyResponse    SurveyResponse       @relation(fields: [surveyResponseId], references: [id])
+  surveyResponseId  Int
+  answer            Json                 // Flexible storage for different answer types
+  createdAt         DateTime             @default(now())
+
+  @@unique([questionId, surveyResponseId])  // Ensure one answer per question per response
+}
+
+// Milestone model - represents key milestones in a program
+model Milestone {
+  id                Int                  @id @default(autoincrement())
+  title             String
+  description       String
+  order             Int                  // For ordering milestones in the program
+  program           Program              @relation(fields: [programId], references: [id])
+  programId         Int
+  reflections       MilestoneReflection[] // One-to-many relation with MilestoneReflection
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  @@unique([programId, order])  // Ensure unique ordering within a program
+}
+
+// MilestoneReflection model - represents a user's reflection on completing a milestone
+model MilestoneReflection {
+  id                Int                  @id @default(autoincrement())
+  milestone         Milestone            @relation(fields: [milestoneId], references: [id])
+  milestoneId       Int
+  session           Session              @relation(fields: [sessionId], references: [id])
+  sessionId         Int
+  user              User                 @relation(fields: [userId], references: [id])
+  userId            Int
+  content           String               @db.Text  // Long-form text for reflection
+  completedAt       DateTime             @default(now())
+
+  @@unique([milestoneId, sessionId])  // Ensure one reflection per milestone per session
+}
+
+// Application model - represents a user's application to a program
+model Application {
+  id                Int                  @id @default(autoincrement())
+  session           Session              @relation(fields: [sessionId], references: [id])
+  sessionId         Int                  @unique  // One application per session
+  user              User                 @relation(fields: [userId], references: [id])
+  userId            Int
+  responses         Json                 // Application responses stored as JSON
+  status            String               // e.g., "submitted", "approved", "rejected"
+  submittedAt       DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+}
+
+// Rating model - represents a user's rating of a program
+model Rating {
+  id                Int                  @id @default(autoincrement())
+  session           Session              @relation(fields: [sessionId], references: [id])
+  sessionId         Int                  @unique  // One rating per session
+  user              User                 @relation(fields: [userId], references: [id])
+  userId            Int
+  score             Int                  // Numeric rating (e.g., 1-5)
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+}
+
+// Review model - represents a user's review of a program
+model Review {
+  id                Int                  @id @default(autoincrement())
+  session           Session              @relation(fields: [sessionId], references: [id])
+  sessionId         Int                  @unique  // One review per session
+  user              User                 @relation(fields: [userId], references: [id])
+  userId            Int
+  content           String               @db.Text  // Long-form text for review
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
 }

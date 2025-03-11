@@ -21,105 +21,245 @@ const openai = new OpenAI({apiKey: OPENAI_API_KEY});
 // Example API endpoint - now uses the database
 app.get('/api/example', async (req, res) => {
   try {
-    // Fetch recent pages from the database
-    const recentPages = await prisma.page.findMany({
-      where: { isPublished: true },
+    // Fetch recent funds from the database
+    const recentFunds = await prisma.fund.findMany({
       orderBy: { createdAt: 'desc' },
       take: 3,
       include: {
-        tags: true
+        tags: true,
+        manager: true
       }
     });
     
-    res.json(recentPages);
+    res.json(recentFunds);
   } catch (error) {
     console.error('Error fetching example data:', error);
     res.status(500).json({ error: 'Failed to fetch data' });
   }
 });
 
-// Get all pages
-app.get('/api/pages', async (req, res) => {
+// Get all funds
+app.get('/api/funds', async (req, res) => {
   try {
-    const pages = await prisma.page.findMany({
-      where: { isPublished: true },
+    const funds = await prisma.fund.findMany({
       orderBy: { createdAt: 'desc' },
       include: {
-        tags: true
+        programs: true
       }
     });
     
     // Transform the data for the frontend
-    const transformedPages = pages.map(page => ({
-      id: page.id,
-      title: page.title,
-      slug: page.slug,
-      description: page.content.substring(0, 150) + '...',
-      category: page.tags.length > 0 ? page.tags[0].name : 'Uncategorized',
-      createdAt: page.createdAt,
-      author: page.authorName,
-      authorEmail: page.authorEmail
+    const transformedFunds = funds.map(fund => ({
+      id: fund.id,
+      name: fund.name,
+      description: fund.description,
+      totalAmount: fund.totalAmount,
+      programCount: fund.programs.length,
+      createdAt: fund.createdAt
     }));
     
-    res.json(transformedPages);
+    res.json(transformedFunds);
   } catch (error) {
-    console.error('Error fetching pages:', error);
-    res.status(500).json({ error: 'Failed to fetch pages' });
+    console.error('Error fetching funds:', error);
+    res.status(500).json({ error: 'Failed to fetch funds' });
   }
 });
 
-// Get a single page by slug
-app.get('/api/pages/:slug', async (req, res) => {
+// Get a single fund by id
+app.get('/api/funds/:id', async (req, res) => {
   try {
-    const { slug } = req.params;
+    const { id } = req.params;
     
-    const page = await prisma.page.findUnique({
-      where: { slug },
+    const fund = await prisma.fund.findUnique({
+      where: { id: parseInt(id) },
       include: {
-        tags: true
+        programs: {
+          include: {
+            milestones: true,
+            surveys: true
+          }
+        },
+        sessions: {
+          include: {
+            user: true,
+            program: true
+          }
+        }
       }
     });
     
-    if (!page) {
-      return res.status(404).json({ error: 'Page not found' });
+    if (!fund) {
+      return res.status(404).json({ error: 'Fund not found' });
     }
     
     // Transform the data for the frontend
-    const transformedPage = {
-      id: page.id,
-      title: page.title,
-      slug: page.slug,
-      content: page.content,
-      description: page.content.substring(0, 150) + '...',
-      category: page.tags.length > 0 ? page.tags[0].name : 'Uncategorized',
-      createdAt: page.createdAt,
-      author: page.authorName,
-      authorEmail: page.authorEmail,
-      tags: page.tags.map(tag => tag.name)
+    const transformedFund = {
+      id: fund.id,
+      name: fund.name,
+      description: fund.description,
+      totalAmount: fund.totalAmount,
+      programs: fund.programs.map(program => ({
+        id: program.id,
+        name: program.name,
+        description: program.description,
+        milestoneCount: program.milestones.length,
+        surveyCount: program.surveys.length
+      })),
+      sessions: fund.sessions.map(session => ({
+        id: session.id,
+        title: session.title,
+        status: session.status,
+        userName: session.user.name,
+        programName: session.program.name,
+        createdAt: session.createdAt
+      })),
+      createdAt: fund.createdAt
     };
     
-    res.json(transformedPage);
+    res.json(transformedFund);
   } catch (error) {
-    console.error('Error fetching page:', error);
-    res.status(500).json({ error: 'Failed to fetch page' });
+    console.error('Error fetching fund:', error);
+    res.status(500).json({ error: 'Failed to fetch fund' });
   }
 });
 
-// AI endpoint
-app.post('/api/ai/generate', async (req, res) => {
+// Get all sessions
+app.get('/api/sessions', async (req, res) => {
   try {
-    const { prompt } = req.body;
+    const sessions = await prisma.session.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: {
+        fund: true,
+        user: true,
+        program: true
+      }
+    });
     
-    if (!prompt) {
-      return res.status(400).json({ error: 'Prompt is required' });
+    // Transform the data for the frontend
+    const transformedSessions = sessions.map(session => ({
+      id: session.id,
+      title: session.title,
+      description: session.description,
+      date: session.date,
+      fund: {
+        id: session.fund.id,
+        name: session.fund.name
+      },
+      user: {
+        id: session.user.id,
+        name: session.user.name
+      },
+      createdAt: session.createdAt
+    }));
+    
+    res.json(transformedSessions);
+  } catch (error) {
+    console.error('Error fetching sessions:', error);
+    res.status(500).json({ error: 'Failed to fetch sessions' });
+  }
+});
+
+// Get a single session by id
+app.get('/api/sessions/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const session = await prisma.session.findUnique({
+      where: { id: parseInt(id) },
+      include: {
+        fund: {
+          include: {
+            programs: true
+          }
+        },
+        user: true,
+        program: true,
+        application: true,
+        surveyResponses: {
+          include: {
+            survey: true
+          }
+        },
+        milestoneReflections: {
+          include: {
+            milestone: true
+          }
+        },
+        review: true
+      }
+    });
+    
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' });
     }
+    
+    res.json(session);
+  } catch (error) {
+    console.error('Error fetching session:', error);
+    res.status(500).json({ error: 'Failed to fetch session' });
+  }
+});
+
+// Get all users
+app.get('/api/users', async (req, res) => {
+  try {
+    const users = await prisma.user.findMany({
+      orderBy: { name: 'asc' }
+    });
+    
+    res.json(users);
+  } catch (error) {
+    console.error('Error fetching users:', error);
+    res.status(500).json({ error: 'Failed to fetch users' });
+  }
+});
+
+// AI endpoint for generating insights
+app.post('/api/ai/generate-insights', async (req, res) => {
+  try {
+    const { sessionId } = req.body;
+    
+    if (!sessionId) {
+      return res.status(400).json({ error: 'Session ID is required' });
+    }
+    
+    // Fetch the session data
+    const session = await prisma.session.findUnique({
+      where: { id: parseInt(sessionId) },
+      include: {
+        fund: true
+      }
+    });
+    
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+    
+    // Create a prompt for the AI
+    const prompt = `
+      Generate insights based on the following impact data:
+      
+      Fund: ${session.fund.name}
+      Session: ${session.title}
+      Description: ${session.description}
+      Date: ${session.date}
+      
+      Data:
+      ${JSON.stringify(session.data, null, 2)}
+      
+      Please provide:
+      1. A summary of the key findings
+      2. Identification of trends or patterns
+      3. Recommendations for future actions
+      4. Any areas of concern that should be addressed
+    `;
     
     const response = await ChatGPTRequest(prompt);
     
-    res.json({ response });
+    res.json({ insights: response });
   } catch (error) {
-    console.error('Error generating AI response:', error);
-    res.status(500).json({ error: 'Failed to generate AI response' });
+    console.error('Error generating AI insights:', error);
+    res.status(500).json({ error: 'Failed to generate AI insights' });
   }
 });
 
@@ -129,7 +269,7 @@ async function ChatGPTRequest(prompt, model = "gpt-4o-mini") {
     const completion = await openai.chat.completions.create({
       model: model,
       messages: [
-        { role: "system", content: "You are a helpful assistant." },
+        { role: "system", content: "You are a helpful assistant specialized in analyzing impact data and generating insights." },
         { role: "user", content: prompt }
       ],
       temperature: 0.7,

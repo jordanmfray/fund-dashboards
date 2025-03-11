@@ -2,131 +2,141 @@ import React, { useState, useEffect } from 'react';
 import { Routes, Route, Link, useNavigate, useParams } from 'react-router-dom';
 import { Container, Flex, Box, Text, Heading, Link as RadixLink, Card, Badge, Avatar, Grid, Button, Strong, Code, Separator, TextArea, TextField } from '@radix-ui/themes';
 
-// Home page - now displays recent pages from the database
+// Home page - now displays recent funds from the database
 function Home() {
-  const [pages, setPages] = useState([]);
+  const [funds, setFunds] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    async function fetchPages() {
+    async function fetchFunds() {
       try {
-        const response = await fetch('/api/pages');
+        console.log('Fetching funds...');
+        const response = await fetch('/api/funds');
+        console.log('Response status:', response.status);
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+        
         const data = await response.json();
-        setPages(data.slice(0, 3)); // Get only the first 3 pages
+        console.log('Funds data:', data);
+        setFunds(data.slice(0, 3)); // Get only the first 3 funds
         setLoading(false);
       } catch (error) {
-        console.error('Error fetching pages:', error);
+        console.error('Error fetching funds:', error);
+        setError(error.message);
         setLoading(false);
       }
     }
 
-    fetchPages();
+    fetchFunds();
   }, []);
 
   return (
     <Container size="4">
       <Box mb="6">
-        <Heading size="6" mb="2">Welcome to AI Prototype Boilerplate</Heading>
+        <Heading size="6" mb="2">Impact Fund Dashboard</Heading>
         <Text color="gray" mb="4">
-          A full-stack React + Express + Prisma + Radix UI + OpenAI starter kit for building AI-powered applications.
+          A platform for monitoring and analyzing the impact of investment funds across various sectors.
         </Text>
       </Box>
       <Box p="4" style={{ backgroundColor: 'var(--blue-2)', borderLeft: '4px solid var(--blue-9)' }}>
-        <Heading size="4" mb="2">Quick Start Guide</Heading>
+        <Heading size="4" mb="2">Dashboard Overview</Heading>
         <Text mb="3">
-          This boilerplate provides everything you need to quickly prototype AI-powered applications:
+          This dashboard provides tools to track and analyze the impact of investment funds:
         </Text>
         <Box pl="5" mb="3" asChild>
           <ul style={{ listStyleType: 'disc' }}>
-            <li><Text>React frontend with Radix UI components</Text></li>
-            <li><Text>Express backend with API endpoints</Text></li>
-            <li><Text>PostgreSQL database with Prisma ORM</Text></li>
-            <li><Text>OpenAI integration for AI features</Text></li>
-            <li><Text>User and content models with relationships</Text></li>
+            <li><Text>View fund performance and impact metrics</Text></li>
+            <li><Text>Analyze session data and insights</Text></li>
+            <li><Text>Generate AI-powered impact analysis</Text></li>
+            <li><Text>Track progress across multiple funds</Text></li>
+            <li><Text>Identify trends and patterns in impact data</Text></li>
           </ul>
         </Box>
-        <Text mb="3">
-          <Strong>To start prototyping:</Strong>
-        </Text>
-        <Box pl="5" mb="3" asChild>
-          <ol style={{ listStyleType: 'decimal' }}>
-            <li><Text>Modify the database schema in <Code>prisma/schema.prisma</Code> for your data model</Text></li>
-            <li><Text>Add new API endpoints in <Code>index.js</Code></Text></li>
-            <li><Text>Create new React components in <Code>src/components/</Code></Text></li>
-            <li><Text>Customize the AI integration in the <Code>ChatGPTRequest</Code> function</Text></li>
-          </ol>
-        </Box>
-        <Text>
-          Explore the <Link to="/pages" style={{ color: 'var(--blue-9)', textDecoration: 'none' }}>example pages</Link> to see how everything works together, or check out the <Link to="/ai-demo" style={{ color: 'var(--blue-9)', textDecoration: 'none' }}>AI demo</Link> to test the OpenAI integration.
-        </Text>
       </Box>
       
-      {loading ? (
-        <Text mt="4">Loading recent pages...</Text>
-      ) : (
-        <Box mt="6">
-          <Heading size="4" mb="3">Recent Pages</Heading>
-          <Grid columns={{ initial: '1', sm: '3' }} gap="4">
-            {pages.map(page => (
-              <Card key={page.id}>
-                <Link to={`/pages/${page.slug}`} style={{ textDecoration: 'none', color: 'inherit' }}>
-                  <Box p="4">
-                    <Heading size="3" mb="2">{page.title}</Heading>
-                    <Text size="2" color="gray">{page.description}</Text>
-                  </Box>
-                </Link>
-              </Card>
-            ))}
-          </Grid>
-          <Box mt="4">
-            <Link to="/pages">
-              <Button variant="soft">View All Pages</Button>
-            </Link>
-          </Box>
+      <Heading size="5" mt="6" mb="4">Recent Funds</Heading>
+      {error && (
+        <Box p="4" style={{ backgroundColor: 'var(--red-2)', borderLeft: '4px solid var(--red-9)', marginBottom: '16px' }}>
+          <Heading size="3" mb="2" color="red">Error</Heading>
+          <Text>{error}</Text>
+          <Text size="2" mt="2">Check the browser console for more details.</Text>
         </Box>
       )}
+      {loading ? (
+        <Text>Loading funds...</Text>
+      ) : (
+        <Grid columns={{ initial: '1', md: '3' }} gap="4">
+          {funds.length > 0 ? (
+            funds.map(fund => (
+              <Card key={fund.id}>
+                <Link to={`/funds/${fund.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+                  <Flex direction="column" p="4">
+                    <Heading size="4" mb="2">{fund.name}</Heading>
+                    <Text color="gray" size="2" mb="3">{fund.description.substring(0, 100)}...</Text>
+                    <Flex justify="between" align="center">
+                      <Text size="2" color="gray">Programs: {fund.programCount}</Text>
+                      <Text size="2" color="blue">${fund.totalAmount.toLocaleString()}</Text>
+                    </Flex>
+                  </Flex>
+                </Link>
+              </Card>
+            ))
+          ) : (
+            <Text>No funds available.</Text>
+          )}
+        </Grid>
+      )}
+      
+      <Flex justify="end" mt="4">
+        <Link to="/funds">
+          <Button variant="soft">View All Funds</Button>
+        </Link>
+      </Flex>
     </Container>
   );
 }
 
-// Pages component to demonstrate User and Page models
-function Pages() {
-  const [pages, setPages] = useState([]);
+// Funds component to display all funds
+function Funds() {
+  const [funds, setFunds] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function fetchPages() {
+    async function fetchFunds() {
       try {
-        const response = await fetch('/api/pages');
+        const response = await fetch('/api/funds');
         const data = await response.json();
-        setPages(data);
+        setFunds(data);
         setLoading(false);
       } catch (error) {
-        console.error('Error fetching pages:', error);
+        console.error('Error fetching funds:', error);
         setLoading(false);
       }
     }
 
-    fetchPages();
+    fetchFunds();
   }, []);
 
   return (
     <Container size="4">
-      <Heading size="6" mb="4">All Pages</Heading>
+      <Heading size="6" mb="4">All Funds</Heading>
       
       {loading ? (
-        <Text>Loading pages...</Text>
+        <Text>Loading funds...</Text>
       ) : (
         <Grid columns={{ initial: '1', md: '2' }} gap="4">
-          {pages.map(page => (
-            <Card key={page.id}>
-              <Link to={`/pages/${page.slug}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+          {funds.map(fund => (
+            <Card key={fund.id}>
+              <Link to={`/funds/${fund.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
                 <Flex direction="column" p="4">
-                  <Heading size="4" mb="2">{page.title}</Heading>
-                  <Text color="gray" size="2" mb="3">{page.description}</Text>
-                  <Flex justify="between" align="center">
-                    <Text size="1" color="gray">Created: {new Date(page.createdAt).toLocaleDateString()}</Text>
-                    <Badge size="1">{page.category}</Badge>
+                  <Heading size="4" mb="2">{fund.name}</Heading>
+                  <Text color="gray" size="2" mb="3">{fund.description.substring(0, 150)}...</Text>
+                  <Flex justify="between" align="center" mb="2">
+                    <Text size="2" color="gray">Programs: {fund.programCount}</Text>
+                    <Text size="2" color="blue">${fund.totalAmount.toLocaleString()}</Text>
                   </Flex>
                 </Flex>
               </Link>
@@ -138,22 +148,22 @@ function Pages() {
   );
 }
 
-// Single Page component
-function PageDetail() {
-  const { slug } = useParams();
-  const [page, setPage] = useState(null);
+// Single Fund component
+function FundDetail() {
+  const { id } = useParams();
+  const [fund, setFund] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    async function fetchPage() {
+    async function fetchFund() {
       try {
-        const response = await fetch(`/api/pages/${slug}`);
+        const response = await fetch(`/api/funds/${id}`);
         if (!response.ok) {
-          throw new Error('Page not found');
+          throw new Error('Fund not found');
         }
         const data = await response.json();
-        setPage(data);
+        setFund(data);
         setLoading(false);
       } catch (err) {
         setError(err.message);
@@ -161,13 +171,13 @@ function PageDetail() {
       }
     }
 
-    fetchPage();
-  }, [slug]);
+    fetchFund();
+  }, [id]);
 
   if (loading) return (
     <Container size="3">
       <Box py="8" textAlign="center">
-        <Text>Loading page...</Text>
+        <Text>Loading fund details...</Text>
       </Box>
     </Container>
   );
@@ -178,8 +188,8 @@ function PageDetail() {
         <Heading size="5" mb="4" color="red">Error</Heading>
         <Text>{error}</Text>
         <Box mt="6">
-          <Link to="/pages">
-            <Button variant="soft">Back to Pages</Button>
+          <Link to="/funds">
+            <Button variant="soft">Back to Funds</Button>
           </Link>
         </Box>
       </Box>
@@ -190,110 +200,302 @@ function PageDetail() {
     <Container size="3">
       <Card>
         <Flex direction="column" p="6" gap="4">
-          <Heading size="6">{page.title}</Heading>
+          <Heading size="6">{fund.name}</Heading>
           
-          <Flex align="center" gap="2">
+          <Flex align="center" gap="2" wrap="wrap">
             <Text size="2" color="gray">
-              By: {page.author} | Created: {new Date(page.createdAt).toLocaleDateString()}
+              Total Amount: ${fund.totalAmount.toLocaleString()}
             </Text>
-            <Badge size="1">{page.category}</Badge>
           </Flex>
           
           <Separator size="4" my="2" />
           
-          <Text size="3">{page.description}</Text>
+          <Text size="3">{fund.description}</Text>
           
-          <Box style={{ whiteSpace: 'pre-wrap' }}>
-            {page.content}
+          <Box mt="4">
+            <Heading size="4" mb="3">Programs</Heading>
+            {fund.programs.length > 0 ? (
+              <Grid columns="1" gap="3">
+                {fund.programs.map(program => (
+                  <Card key={program.id}>
+                    <Box p="3">
+                      <Heading size="3" mb="2">{program.name}</Heading>
+                      <Text size="2" mb="2">{program.description.substring(0, 150)}...</Text>
+                      <Flex gap="3">
+                        <Badge variant="soft">Milestones: {program.milestoneCount}</Badge>
+                        <Badge variant="soft">Surveys: {program.surveyCount}</Badge>
+                      </Flex>
+                    </Box>
+                  </Card>
+                ))}
+              </Grid>
+            ) : (
+              <Text color="gray">No programs found for this fund.</Text>
+            )}
           </Box>
           
           <Box mt="4">
-            <Link to="/pages">
-              <Button variant="soft">Back to Pages</Button>
-            </Link>
+            <Heading size="4" mb="3">Sessions</Heading>
+            {fund.sessions.length > 0 ? (
+              <Grid columns="1" gap="3">
+                {fund.sessions.map(session => (
+                  <Card key={session.id}>
+                    <Box p="3">
+                      <Heading size="3" mb="1">{session.title}</Heading>
+                      <Flex gap="2" mb="2">
+                        <Badge variant="soft">{session.status}</Badge>
+                        <Text size="1" color="gray">User: {session.userName}</Text>
+                        <Text size="1" color="gray">Program: {session.programName}</Text>
+                      </Flex>
+                      <Text size="2" color="gray">Created: {new Date(session.createdAt).toLocaleDateString()}</Text>
+                    </Box>
+                  </Card>
+                ))}
+              </Grid>
+            ) : (
+              <Text color="gray">No sessions found for this fund.</Text>
+            )}
           </Box>
+          
+          <Flex justify="end" mt="4">
+            <Link to="/funds">
+              <Button variant="soft">Back to Funds</Button>
+            </Link>
+          </Flex>
         </Flex>
       </Card>
     </Container>
   );
 }
 
-function AIDemo() {
-  const [prompt, setPrompt] = useState('');
-  const [response, setResponse] = useState('');
-  const [loading, setLoading] = useState(false);
+// Sessions component to display all sessions
+function Sessions() {
+  const [sessions, setSessions] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchSessions() {
+      try {
+        const response = await fetch('/api/sessions');
+        const data = await response.json();
+        setSessions(data);
+        setLoading(false);
+      } catch (error) {
+        console.error('Error fetching sessions:', error);
+        setLoading(false);
+      }
+    }
+
+    fetchSessions();
+  }, []);
+
+  return (
+    <Container size="4">
+      <Heading size="6" mb="4">All Sessions</Heading>
+      
+      {loading ? (
+        <Text>Loading sessions...</Text>
+      ) : (
+        <Grid columns={{ initial: '1', md: '2' }} gap="4">
+          {sessions.map(session => (
+            <Card key={session.id}>
+              <Link to={`/sessions/${session.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+                <Flex direction="column" p="4">
+                  <Heading size="4" mb="2">{session.title}</Heading>
+                  <Text color="gray" size="2" mb="3">{session.description}</Text>
+                  <Flex justify="between" align="center">
+                    <Text size="1" color="gray">Date: {new Date(session.date).toLocaleDateString()}</Text>
+                    <Badge size="1">{session.fund.name}</Badge>
+                  </Flex>
+                </Flex>
+              </Link>
+            </Card>
+          ))}
+        </Grid>
+      )}
+    </Container>
+  );
+}
+
+// Single Session component
+function SessionDetail() {
+  const { id } = useParams();
+  const [session, setSession] = useState(null);
+  const [insights, setInsights] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [insightsLoading, setInsightsLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
+  useEffect(() => {
+    async function fetchSession() {
+      try {
+        const response = await fetch(`/api/sessions/${id}`);
+        if (!response.ok) {
+          throw new Error('Session not found');
+        }
+        const data = await response.json();
+        setSession(data);
+        setLoading(false);
+      } catch (err) {
+        setError(err.message);
+        setLoading(false);
+      }
+    }
 
+    fetchSession();
+  }, [id]);
+
+  const generateInsights = async () => {
+    setInsightsLoading(true);
     try {
-      const res = await fetch('/api/ai/generate', {
+      const response = await fetch('/api/ai/generate-insights', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ prompt }),
+        body: JSON.stringify({ sessionId: id }),
       });
-
-      if (!res.ok) {
-        throw new Error('Failed to get AI response');
+      
+      if (!response.ok) {
+        throw new Error('Failed to generate insights');
       }
-
-      const data = await res.json();
-      setResponse(data.response);
-      setLoading(false);
+      
+      const data = await response.json();
+      setInsights(data.insights);
+      setInsightsLoading(false);
     } catch (err) {
       setError(err.message);
-      setLoading(false);
+      setInsightsLoading(false);
     }
   };
+
+  if (loading) return (
+    <Container size="3">
+      <Box py="8" textAlign="center">
+        <Text>Loading session details...</Text>
+      </Box>
+    </Container>
+  );
+
+  if (error) return (
+    <Container size="3">
+      <Box py="8" textAlign="center">
+        <Heading size="5" mb="4" color="red">Error</Heading>
+        <Text>{error}</Text>
+        <Box mt="6">
+          <Link to="/sessions">
+            <Button variant="soft">Back to Sessions</Button>
+          </Link>
+        </Box>
+      </Box>
+    </Container>
+  );
 
   return (
     <Container size="3">
       <Card>
         <Flex direction="column" p="6" gap="4">
-          <Heading size="6">AI Demo</Heading>
-          <Text color="gray">Enter a prompt to generate a response using AI</Text>
+          <Heading size="6">{session.title}</Heading>
           
-          <form onSubmit={handleSubmit}>
-            <Flex direction="column" gap="3">
-              <TextArea 
-                placeholder="Enter your prompt here..."
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                required
-                size="3"
-              />
-              
-              <Box>
-                <Button type="submit" disabled={loading} color="purple">
-                  {loading ? 'Generating...' : 'Generate Response'}
-                </Button>
+          <Flex align="center" gap="2">
+            <Text size="2" color="gray">
+              Fund: {session.fund.name} | Date: {new Date(session.date).toLocaleDateString()}
+            </Text>
+          </Flex>
+          
+          <Separator size="4" my="2" />
+          
+          <Text size="3">{session.description}</Text>
+          
+          <Box>
+            <Heading size="4" mb="3">Impact Data</Heading>
+            <Card>
+              <Box p="4">
+                {session.data.metrics && (
+                  <Box mb="4">
+                    <Heading size="3" mb="2">Metrics</Heading>
+                    <Grid columns={{ initial: '1', sm: '2' }} gap="3">
+                      {Object.entries(session.data.metrics).map(([key, value]) => (
+                        <Flex key={key} justify="between" p="2" style={{ backgroundColor: 'var(--gray-2)', borderRadius: 'var(--radius-2)' }}>
+                          <Text size="2">{key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}</Text>
+                          <Strong>{value.toLocaleString()}</Strong>
+                        </Flex>
+                      ))}
+                    </Grid>
+                  </Box>
+                )}
+                
+                {session.data.keyFindings && (
+                  <Box mb="4">
+                    <Heading size="3" mb="2">Key Findings</Heading>
+                    <Box pl="3" asChild>
+                      <ul style={{ listStyleType: 'disc' }}>
+                        {session.data.keyFindings.map((finding, index) => (
+                          <li key={index}><Text size="2">{finding}</Text></li>
+                        ))}
+                      </ul>
+                    </Box>
+                  </Box>
+                )}
+                
+                {session.data.challenges && (
+                  <Box mb="4">
+                    <Heading size="3" mb="2">Challenges</Heading>
+                    <Box pl="3" asChild>
+                      <ul style={{ listStyleType: 'disc' }}>
+                        {session.data.challenges.map((challenge, index) => (
+                          <li key={index}><Text size="2">{challenge}</Text></li>
+                        ))}
+                      </ul>
+                    </Box>
+                  </Box>
+                )}
+                
+                {session.data.recommendations && (
+                  <Box mb="4">
+                    <Heading size="3" mb="2">Recommendations</Heading>
+                    <Box pl="3" asChild>
+                      <ul style={{ listStyleType: 'disc' }}>
+                        {session.data.recommendations.map((recommendation, index) => (
+                          <li key={index}><Text size="2">{recommendation}</Text></li>
+                        ))}
+                      </ul>
+                    </Box>
+                  </Box>
+                )}
               </Box>
-            </Flex>
-          </form>
+            </Card>
+          </Box>
           
-          {error && (
-            <Box p="3" style={{ backgroundColor: 'var(--red-3)', borderRadius: 'var(--radius-3)' }}>
-              <Text color="red">{error}</Text>
-            </Box>
-          )}
-          
-          {response && (
-            <Box mt="4">
-              <Heading size="4" mb="2">Response:</Heading>
+          <Box mt="4">
+            <Heading size="4" mb="3">AI Insights</Heading>
+            {insights ? (
               <Box p="4" style={{ 
                 backgroundColor: 'var(--gray-2)', 
                 borderRadius: 'var(--radius-3)',
                 whiteSpace: 'pre-wrap'
               }}>
-                <Text>{response}</Text>
+                <Text>{insights}</Text>
               </Box>
-            </Box>
-          )}
+            ) : (
+              <Flex direction="column" align="center" gap="3">
+                <Text>Generate AI-powered insights based on this session's data</Text>
+                <Button 
+                  onClick={generateInsights} 
+                  disabled={insightsLoading}
+                  color="purple"
+                >
+                  {insightsLoading ? 'Generating...' : 'Generate Insights'}
+                </Button>
+              </Flex>
+            )}
+          </Box>
+          
+          <Box mt="4">
+            <Link to="/sessions">
+              <Button variant="soft">Back to Sessions</Button>
+            </Link>
+          </Box>
         </Flex>
       </Card>
     </Container>
@@ -308,17 +510,17 @@ function App() {
           <Flex py="4" justify="between" align="center">
             <Flex align="center" gap="4">
               <Link to="/" style={{ textDecoration: 'none' }}>
-                <Heading size="5" style={{ color: 'var(--gray-12)' }}>AI Prototype</Heading>
+                <Heading size="5" style={{ color: 'var(--gray-12)' }}>Impact Fund Dashboard</Heading>
               </Link>
               <Flex as="nav" gap="5">
                 <Link to="/" style={{ textDecoration: 'none', color: 'var(--gray-12)' }}>
                   <Text>Home</Text>
                 </Link>
-                <Link to="/pages" style={{ textDecoration: 'none', color: 'var(--gray-12)' }}>
-                  <Text>Pages</Text>
+                <Link to="/funds" style={{ textDecoration: 'none', color: 'var(--gray-12)' }}>
+                  <Text>Funds</Text>
                 </Link>
-                <Link to="/ai-demo" style={{ textDecoration: 'none', color: 'var(--gray-12)' }}>
-                  <Text>AI Demo</Text>
+                <Link to="/sessions" style={{ textDecoration: 'none', color: 'var(--gray-12)' }}>
+                  <Text>Sessions</Text>
                 </Link>
               </Flex>
             </Flex>
@@ -329,18 +531,19 @@ function App() {
       <Box py="8" style={{ flex: 1 }}>
         <Routes>
           <Route path="/" element={<Home />} />
-          <Route path="/pages" element={<Pages />} />
-          <Route path="/pages/:slug" element={<PageDetail />} />
-          <Route path="/ai-demo" element={<AIDemo />} />
+          <Route path="/funds" element={<Funds />} />
+          <Route path="/funds/:id" element={<FundDetail />} />
+          <Route path="/sessions" element={<Sessions />} />
+          <Route path="/sessions/:id" element={<SessionDetail />} />
         </Routes>
       </Box>
 
       <Box style={{ backgroundColor: 'var(--gray-2)' }}>
         <Container size="4">
           <Flex py="4" justify="between" align="center">
-            <Text size="2" color="gray">© 2023 AI Prototype Boilerplate</Text>
+            <Text size="2" color="gray">© 2025 Impact Fund Dashboard</Text>
             <Flex gap="4">
-              <RadixLink href="https://github.com" target="_blank" size="2">GitHub</RadixLink>
+              <RadixLink href="https://github.com/jordanmfray/fund-dashboards" target="_blank" size="2">GitHub</RadixLink>
               <RadixLink href="https://openai.com" target="_blank" size="2">OpenAI</RadixLink>
               <RadixLink href="https://radix-ui.com" target="_blank" size="2">Radix UI</RadixLink>
             </Flex>
