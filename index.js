@@ -4,6 +4,8 @@ dotenv.config();
 import express from 'express';
 // Import Prisma
 import { PrismaClient } from '@prisma/client';
+import { spawn } from 'child_process';
+
 const prisma = new PrismaClient();
 
 const app = express();
@@ -107,7 +109,6 @@ app.get('/api/funds/:id', async (req, res) => {
       })),
       sessions: fund.sessions.map(session => ({
         id: session.id,
-        title: session.title,
         status: session.status,
         userName: session.user.name,
         programName: session.program.name,
@@ -138,7 +139,6 @@ app.get('/api/sessions', async (req, res) => {
     // Transform the data for the frontend
     const transformedSessions = sessions.map(session => ({
       id: session.id,
-      title: session.title,
       description: session.description,
       date: session.date,
       fund: {
@@ -240,7 +240,7 @@ app.post('/api/ai/generate-insights', async (req, res) => {
       Generate insights based on the following impact data:
       
       Fund: ${session.fund.name}
-      Session: ${session.title}
+      Session ID: ${session.id}
       Description: ${session.description}
       Date: ${session.date}
       
@@ -282,6 +282,170 @@ async function ChatGPTRequest(prompt, model = "gpt-4o-mini") {
     throw new Error('Failed to generate AI response');
   }
 }
+
+// Get all programs
+app.get('/api/programs', async (req, res) => {
+  try {
+    const programs = await prisma.program.findMany({
+      orderBy: { name: 'asc' },
+      include: {
+        milestones: true,
+        surveys: true,
+        funds: true
+      }
+    });
+    
+    // Transform the data for the frontend
+    const transformedPrograms = programs.map(program => ({
+      id: program.id,
+      name: program.name,
+      description: program.description,
+      milestoneCount: program.milestones.length,
+      surveyCount: program.surveys.length,
+      fundCount: program.funds.length,
+      createdAt: program.createdAt
+    }));
+    
+    res.json(transformedPrograms);
+  } catch (error) {
+    console.error('Error fetching programs:', error);
+    res.status(500).json({ error: 'Failed to fetch programs' });
+  }
+});
+
+// Get a single program by id
+app.get('/api/programs/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const program = await prisma.program.findUnique({
+      where: { id: parseInt(id) },
+      include: {
+        milestones: {
+          orderBy: { order: 'asc' }
+        },
+        surveys: true,
+        funds: true
+      }
+    });
+    
+    if (!program) {
+      return res.status(404).json({ error: 'Program not found' });
+    }
+    
+    res.json(program);
+  } catch (error) {
+    console.error('Error fetching program:', error);
+    res.status(500).json({ error: 'Failed to fetch program' });
+  }
+});
+
+// Generate sessions for a program with real-time updates using server-sent events
+app.get('/api/programs/:id/generate-sessions', async (req, res) => {
+  const { id } = req.params;
+  const { fundId, count = 1 } = req.query;
+  
+  // Validate inputs
+  if (!fundId) {
+    return res.status(400).json({ error: 'Fund ID is required' });
+  }
+  
+  const programId = parseInt(id);
+  const parsedFundId = parseInt(fundId);
+  const sessionCount = parseInt(count);
+  
+  if (isNaN(programId) || isNaN(parsedFundId) || isNaN(sessionCount)) {
+    return res.status(400).json({ error: 'Invalid parameters' });
+  }
+  
+  // Set up SSE
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  
+  // Helper function to send SSE messages
+  const sendMessage = (type, message) => {
+    res.write(`data: ${JSON.stringify({ type, message })}\n\n`);
+  };
+  
+  try {
+    // Check if program and fund exist
+    const program = await prisma.program.findUnique({
+      where: { id: programId }
+    });
+    
+    if (!program) {
+      sendMessage('error', 'Program not found');
+      return res.end();
+    }
+    
+    const fund = await prisma.fund.findUnique({
+      where: { id: parsedFundId }
+    });
+    
+    if (!fund) {
+      sendMessage('error', 'Fund not found');
+      return res.end();
+    }
+    
+    // Use the imported spawn function
+    sendMessage('log', `Starting generation of ${sessionCount} session(s) for program "${program.name}" in fund "${fund.name}"...`);
+    
+    // Run the generate-multiple-sessions.js script as a child process
+    const generateProcess = spawn('node', [
+      'generate-multiple-sessions.js', 
+      sessionCount.toString(),
+      programId.toString(),
+      parsedFundId.toString()
+    ]);
+    
+    // Handle stdout (log messages)
+    generateProcess.stdout.on('data', (data) => {
+      const messages = data.toString().trim().split('\n');
+      messages.forEach(message => {
+        if (message) {
+          sendMessage('log', message);
+        }
+      });
+    });
+    
+    // Handle stderr (error messages)
+    generateProcess.stderr.on('data', (data) => {
+      const messages = data.toString().trim().split('\n');
+      messages.forEach(message => {
+        if (message) {
+          sendMessage('log', `ERROR: ${message}`);
+        }
+      });
+    });
+    
+    // Handle process completion
+    generateProcess.on('close', (code) => {
+      if (code === 0) {
+        sendMessage('log', 'Session generation completed successfully.');
+        sendMessage('complete', { programId, fundId: parsedFundId, count: sessionCount });
+      } else {
+        sendMessage('error', `Session generation failed with code ${code}`);
+      }
+      res.end();
+    });
+    
+    // Handle client disconnect
+    req.on('close', () => {
+      // Attempt to kill the process if the client disconnects
+      try {
+        generateProcess.kill();
+      } catch (err) {
+        console.error('Error killing generate process:', err);
+      }
+    });
+    
+  } catch (error) {
+    console.error('Error generating sessions:', error);
+    sendMessage('error', error.message);
+    res.end();
+  }
+});
 
 app.listen(port, () => {
   console.log(`Server running at http://localhost:${port}`);

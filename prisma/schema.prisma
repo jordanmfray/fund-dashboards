@@ -37,15 +37,23 @@ enum QuestionType {
   MULTIPLE_CHOICE
   CHECKBOX
   TEXT
-  RATING
-  SCALE
+  LIKERT
 }
 
 // User model - represents application users
 model User {
   id                Int                  @id @default(autoincrement())
   name              String
-  profile           Json?                // Flexible JSON data storage for beneficiary profile
+  // Profile data - previously stored as JSON
+  age               Int?                 // Age of the user
+  jobTitle          String?              // Job title or role
+  yearsInJob        Int?                 // Years in current job/role
+  income            Float?               // Annual income
+  maritalStatus     String?              // Marital status (Single, Married, Divorced, Widowed)
+  numberOfChildren  Int?                 // Number of children
+  currentChallenges String[]             // Array of current challenges
+  hopefulOutcomes   String[]             // Array of hopeful outcomes
+  // Relations
   sessions          Session[]            // One-to-many relation with Session
   applications      Application[]        // One-to-many relation with Application
   milestoneReflections MilestoneReflection[] // One-to-many relation with MilestoneReflection

@@ -56,23 +56,26 @@ async function generateApplicationResponses(programId, beneficiaryProfile) {
     console.log(`Found ${questions.length} application questions`);
     
     const prompt = `
-You are helping to generate realistic application responses for a pastor applying to a coaching program.
+You are helping to generate realistic application responses for a person applying to a program called "${program.name}".
 
-Here is the pastor's profile:
+Program Description: ${program.description || "A coaching program designed to support individuals in their personal and professional growth."}
+
+Here is the applicant's profile:
 ${JSON.stringify(beneficiaryProfile, null, 2)}
 
 Here are the application questions:
 ${JSON.stringify(questions, null, 2)}
 
-Please generate thoughtful and detailed responses to these questions that reflect the pastor's background, challenges, and goals. The responses should:
+Please generate thoughtful and detailed responses to these questions that reflect the applicant's background, challenges, and goals. The responses should:
 1. Be realistic and thoughtful
-2. Reference specific challenges and goals from the pastor's profile
-3. Show why the pastor is seeking coaching
-4. Be written in first person from the pastor's perspective
+2. Reference specific challenges and goals from the applicant's profile
+3. Show why the applicant is seeking support from this specific program
+4. Be written in first person from the applicant's perspective
+5. Directly relate to the program description and purpose
 
 Format your response as a JSON array of objects, where each object has:
 - questionId: the ID of the question
-- response: the pastor's response to that question
+- response: the applicant's response to that question
 
 The response should be valid JSON that can be parsed with JSON.parse().
 Do not include any markdown formatting or backticks in your response.
@@ -113,28 +116,15 @@ Do not include any markdown formatting or backticks in your response.
   } catch (error) {
     console.error('Error generating application responses:', error);
     
-    // Create fallback responses if there's an error
-    return [
-      {
-        questionId: 1,
-        response: "I'm seeking coaching to help me navigate the challenges I'm facing in my ministry. I'm struggling with burnout and finding a healthy work-life balance. I hope this program can provide me with the tools and support I need to become a more effective pastor while also taking care of my personal well-being."
-      },
-      {
-        questionId: 2,
-        response: "My biggest challenges include managing the expectations of my congregation, dealing with conflicts within the church, and feeling isolated in my role. I've been in ministry for several years, but these challenges have become more pronounced recently."
-      },
-      {
-        questionId: 3,
-        response: "My primary goal is to develop a sustainable approach to ministry that allows me to serve effectively without sacrificing my health or family relationships. I also want to improve my leadership and communication skills to better guide my congregation."
-      }
-    ];
+    // Return an empty array instead of generating fallback data
+    return [];
   }
 }
 
 /**
  * Generates pre-survey responses based on the beneficiary profile
  */
-async function generatePreSurveyResponses(surveyId, beneficiaryProfile) {
+async function generatePreSurveyResponses(surveyId, beneficiaryProfile, programName, programDescription) {
   try {
     console.log('Generating pre-survey responses...');
     
@@ -156,19 +146,26 @@ async function generatePreSurveyResponses(surveyId, beneficiaryProfile) {
     }));
     
     const prompt = `
-You are helping to generate realistic pre-survey responses for a pastor starting a coaching program.
+You are helping to generate realistic pre-survey responses for a person who is about to start a program called "${programName || 'Support Program'}".
 
-Here is the pastor's profile:
+Program Description: ${programDescription || "A program designed to support individuals in their personal and professional growth."}
+
+Here is the applicant's profile:
 ${JSON.stringify(beneficiaryProfile, null, 2)}
 
 Here are the pre-survey questions:
 ${JSON.stringify(questions, null, 2)}
 
-Please generate thoughtful responses to each question that reflect the pastor's initial state BEFORE starting the coaching program. The responses should align with the challenges and struggles mentioned in the pastor's profile.
+Please generate thoughtful responses to each question that reflect the applicant's initial state BEFORE starting the program. The responses should:
+1. Align with the challenges and struggles mentioned in the applicant's profile
+2. Reflect their current state before receiving any support
+3. Show their expectations and hopes related to the specific program they're entering
+4. Be relevant to the program description and purpose
+5. The 12 likert scale items should be between 0 and 10, with 5 or less being below average, 6-8 being average, and 9-10 being above average.
 
 Format your response as a JSON array of objects, where each object has:
 - questionId: the ID of the question
-- response: the pastor's response to that question
+- response: the applicant's response to that question
 
 The response should be valid JSON that can be parsed with JSON.parse().
 Do not include any markdown formatting or backticks in your response.
@@ -209,20 +206,8 @@ Do not include any markdown formatting or backticks in your response.
   } catch (error) {
     console.error('Error generating pre-survey responses:', error);
     
-    // Create fallback responses if there's an error
-    const survey = await prisma.survey.findUnique({
-      where: { id: surveyId },
-      include: { questions: true }
-    });
-    
-    if (!survey || !survey.questions) {
-      return [];
-    }
-    
-    return survey.questions.map(question => ({
-      questionId: question.id,
-      response: `Before coaching, I was struggling with ${beneficiaryProfile.currentChallenges[0]} and needed help with ${beneficiaryProfile.reasonsForSeekingCoaching[0]}.`
-    }));
+    // Return an empty array instead of generating fallback data
+    return [];
   }
 }
 
@@ -233,15 +218,18 @@ async function generateMilestoneReflections(programId, beneficiaryProfile, outco
   try {
     console.log('Generating milestone reflections...');
     
-    // Get the program milestones
-    const milestones = await prisma.milestone.findMany({
-      where: { programId: programId }
+    // Get the program details and milestones
+    const program = await prisma.program.findUnique({
+      where: { id: programId },
+      include: { milestones: true }
     });
     
-    if (!milestones || milestones.length === 0) {
+    if (!program || !program.milestones || program.milestones.length === 0) {
       console.log('No milestones found for this program');
       return [];
     }
+    
+    const milestones = program.milestones;
     
     // Determine reflection tone based on outcome type
     let reflectionTone = '';
@@ -254,26 +242,30 @@ async function generateMilestoneReflections(programId, beneficiaryProfile, outco
     }
     
     const prompt = `
-You are helping to generate realistic milestone reflections for a pastor going through a coaching program.
+You are helping to generate realistic milestone reflections for a person going through a program called "${program.name}".
 
-Here is the pastor's profile:
+Program Description: ${program.description || "A program designed to support individuals in their personal and professional growth."}
+
+Here is the participant's profile:
 ${JSON.stringify(beneficiaryProfile, null, 2)}
 
 Here are the program milestones:
 ${JSON.stringify(milestones, null, 2)}
 
-Please generate ${reflectionTone} reflections for each milestone that show the pastor's journey through the coaching program. 
+Please generate ${reflectionTone} reflections for each milestone that show the participant's journey through the program. 
 
 IMPORTANT: Create reflections with VARIABLE LENGTH. Some should be a single sentence, others 2-3 sentences, and others 4-5 sentences. Mix them up randomly.
 
 Each reflection should:
-1. Reference specific challenges from the pastor's profile
-2. Show the pastor's experience with that milestone
-3. Be written in first person from the pastor's perspective
+1. Reference specific challenges from the participant's profile
+2. Show the participant's experience with that milestone
+3. Be written in first person from the participant's perspective
+4. Relate directly to the program description and purpose
+5. Show progression through the program (earlier milestones should show initial experiences, later ones should show development)
 
 Format your response as a JSON array of objects, where each object has:
 - milestoneId: the ID of the milestone
-- reflection: the pastor's reflection on that milestone (varying in length as specified)
+- reflection: the participant's reflection on that milestone (varying in length as specified)
 
 The response should be valid JSON that can be parsed with JSON.parse().
 Do not include any markdown formatting or backticks in your response.
@@ -314,53 +306,8 @@ Do not include any markdown formatting or backticks in your response.
   } catch (error) {
     console.error('Error generating milestone reflections:', error);
     
-    // Create fallback reflections if there's an error
-    const milestones = await prisma.milestone.findMany({
-      where: { programId: programId }
-    });
-    
-    if (!milestones || milestones.length === 0) {
-      return [];
-    }
-    
-    // Create fallback reflections based on outcome type
-    return milestones.map((milestone, index) => {
-      let reflection = '';
-      
-      // Vary the length of reflections
-      const reflectionLength = Math.floor(Math.random() * 3) + 1; // 1, 2, or 3
-      
-      if (outcomeType === 'positive') {
-        if (reflectionLength === 1) {
-          reflection = `This milestone was very helpful for my growth as a pastor.`;
-        } else if (reflectionLength === 2) {
-          reflection = `I found this milestone to be transformative. The insights I gained have already improved my ministry and family life.`;
-        } else {
-          reflection = `Completing this milestone was a significant turning point in my journey. I've gained valuable tools that have helped me address my challenges effectively. I feel more confident and equipped to lead my congregation now.`;
-        }
-      } else if (outcomeType === 'neutral') {
-        if (reflectionLength === 1) {
-          reflection = `This milestone had some helpful elements, but also some challenges.`;
-        } else if (reflectionLength === 2) {
-          reflection = `I found parts of this milestone useful, though I'm still working through some of the same issues. There's been some improvement but not as much as I'd hoped.`;
-        } else {
-          reflection = `This milestone provided some insights, but I'm still struggling with implementing the concepts consistently. While I've seen small improvements in some areas, other challenges remain largely the same. I'm cautiously optimistic about continued progress.`;
-        }
-      } else { // negative
-        if (reflectionLength === 1) {
-          reflection = `I didn't find this milestone particularly helpful for my situation.`;
-        } else if (reflectionLength === 2) {
-          reflection = `This milestone didn't address my specific challenges. I'm still facing the same issues with little improvement.`;
-        } else {
-          reflection = `I found this milestone to be disconnected from my actual needs as a pastor. The concepts presented were too general and didn't provide practical solutions to my specific challenges. I'm still struggling with the same issues I had before.`;
-        }
-      }
-      
-      return {
-        milestoneId: milestone.id,
-        reflection: reflection
-      };
-    });
+    // Return an empty array instead of generating fallback data
+    return [];
   }
 }
 
@@ -370,6 +317,16 @@ Do not include any markdown formatting or backticks in your response.
 async function generatePostSurveyResponses(programId, beneficiaryProfile, outcomeType = 'positive') {
   try {
     console.log('Generating post-survey responses...');
+    
+    // Get the program details
+    const program = await prisma.program.findUnique({
+      where: { id: programId }
+    });
+    
+    if (!program) {
+      console.log('Program not found');
+      return [];
+    }
     
     // Get the post-survey for this program
     const postSurvey = await prisma.survey.findFirst({
@@ -402,22 +359,28 @@ async function generatePostSurveyResponses(programId, beneficiaryProfile, outcom
     }
     
     const prompt = `
-You are helping to generate realistic post-survey responses for a pastor who has completed a coaching program.
+You are helping to generate realistic post-survey responses for a person who has completed a program called "${program.name}".
 
-Here is the pastor's profile:
+Program Description: ${program.description || "A program designed to support individuals in their personal and professional growth."}
+
+Here is the participant's profile:
 ${JSON.stringify(beneficiaryProfile, null, 2)}
 
 Here are the post-survey questions:
 ${JSON.stringify(postSurvey.questions, null, 2)}
 
-Please generate ${responseTone} responses that reflect the pastor's experience after completing the coaching program.
+Please generate ${responseTone} responses that reflect the participant's experience after completing the program. The responses should:
+1. Directly reference the program description and purpose
+2. Mention specific aspects of the program that were helpful or not helpful
+3. Relate to the participant's initial challenges and how they were addressed
+4. Show the impact of the program on their personal and professional life
 
 Format your response as a JSON array of objects, where each object has:
 - questionId: the ID of the question
-- response: the pastor's response to that question
+- response: the participant's response to that question
 
 For questions that ask for a rating (1-5), provide a numeric response that aligns with the ${outcomeType} outcome.
-For open-ended questions, provide a detailed response (2-4 sentences) that reflects the pastor's experience.
+For open-ended questions, provide a detailed response (2-4 sentences) that reflects the participant's experience.
 
 The response should be valid JSON that can be parsed with JSON.parse().
 Do not include any markdown formatting or backticks in your response.
@@ -458,101 +421,50 @@ Do not include any markdown formatting or backticks in your response.
   } catch (error) {
     console.error('Error generating post-survey responses:', error);
     
-    // Create fallback responses if there's an error
-    try {
-      // Get the post-survey for this program
-      const postSurvey = await prisma.survey.findFirst({
-        where: {
-          type: 'POST',
-          programs: {
-            some: {
-              id: programId
-            }
-          }
-        },
-        include: {
-          questions: true
-        }
-      });
-      
-      if (!postSurvey || !postSurvey.questions || postSurvey.questions.length === 0) {
-        return [];
-      }
-      
-      // Create fallback responses based on outcome type
-      return postSurvey.questions.map(question => {
-        let response = '';
-        
-        // For rating questions (assuming they're on a 1-5 scale)
-        if (question.questionText?.toLowerCase().includes('rate') || 
-            question.questionText?.toLowerCase().includes('rating') ||
-            question.questionText?.toLowerCase().includes('scale') ||
-            question.text?.toLowerCase().includes('rate') || 
-            question.text?.toLowerCase().includes('rating') ||
-            question.text?.toLowerCase().includes('scale')) {
-          if (outcomeType === 'positive') {
-            response = Math.floor(Math.random() * 2) + 4; // 4 or 5
-          } else if (outcomeType === 'neutral') {
-            response = 3; // 3
-          } else {
-            response = Math.floor(Math.random() * 2) + 1; // 1 or 2
-          }
-        } 
-        // For open-ended questions
-        else {
-          if (outcomeType === 'positive') {
-            response = "The coaching program has been transformative for both my ministry and personal life. I've gained valuable tools and insights that have helped me address my challenges effectively.";
-          } else if (outcomeType === 'neutral') {
-            response = "The coaching program had some helpful elements, though I'm still working through some of the same issues. There's been some improvement but not as much as I'd hoped.";
-          } else {
-            response = "I didn't find the coaching program particularly helpful for my situation. I'm still facing the same challenges with little improvement.";
-          }
-        }
-        
-        return {
-          questionId: question.id,
-          response: response
-        };
-      });
-    } catch (innerError) {
-      console.error('Error creating fallback post-survey responses:', innerError);
-      return [];
-    }
+    // Return an empty array instead of generating fallback data
+    return [];
   }
 }
 
 /**
  * Generates a review of the coaching program
  */
-async function generateReview(beneficiaryProfile, outcomeType = 'positive') {
+async function generateReview(beneficiaryProfile, programName, programDescription, outcomeType = 'positive') {
   try {
     console.log('Generating review...');
     
     // Determine rating range based on outcome type
     let ratingRange = '';
+    let ratingValue = '';
     if (outcomeType === 'positive') {
       ratingRange = 'between 4 and 5';
+      ratingValue = 'either 4 or 5';
     } else if (outcomeType === 'neutral') {
-      ratingRange = 'between 2 and 3';
+      ratingRange = 'exactly 3'; // Neutral outcomes should have a rating of exactly 3
+      ratingValue = '3';
     } else if (outcomeType === 'negative') {
       ratingRange = 'between 1 and 2';
+      ratingValue = 'either 1 or 2';
     }
     
     const prompt = `
-You are helping to generate a realistic review from a pastor who has completed a coaching program.
+You are helping to generate a realistic review from a person who has completed a program called "${programName || 'Support Program'}".
 
-Here is the pastor's profile:
+Program Description: ${programDescription || "A program designed to support individuals in their personal and professional growth."}
+
+Here is the participant's profile:
 ${JSON.stringify(beneficiaryProfile, null, 2)}
 
-Please generate a ${outcomeType} review of the pastor's experience with the coaching program. The review should:
-1. Reference the specific challenges the pastor was facing before the program
-2. Describe ways the coaching helped or didn't help address those challenges
-3. Mention improvements or lack thereof in the pastor's ministry and personal life
-4. Include emotional elements about how the pastor feels about the experience
-5. End with a recommendation or warning for other pastors in similar situations
+Please generate a ${outcomeType} review of the participant's experience with the program. The review should:
+1. Reference the specific challenges the participant was facing before the program
+2. Describe ways the program helped or didn't help address those challenges
+3. Mention improvements or lack thereof in the participant's personal and professional life
+4. Include emotional elements about how the participant feels about the experience
+5. End with a recommendation or warning for others in similar situations
+6. Directly reference the program's purpose and description
 
 Format your response as a JSON object with these fields:
-- rating: a number ${ratingRange} (integer only)
+- rating: a number ${ratingRange} (integer only). The rating MUST be ${ratingValue}.
 - text: a short summary (1-2 sentences)
 - fullReview: the detailed review (at least 250 words)
 - impact: a one-sentence statement about the impact of the program
@@ -584,68 +496,14 @@ Do not include any markdown formatting or backticks in your response.
     } catch (parseError) {
       console.error('Error parsing review JSON:', parseError);
       
-      // Create a fallback review
-      let rating = 5;
-      let text = '';
-      let fullReview = '';
-      let impact = '';
-      
-      if (outcomeType === 'positive') {
-        rating = Math.floor(Math.random() * 2) + 4; // 4 or 5
-        text = "This coaching program transformed my ministry and helped me overcome burnout.";
-        fullReview = "When I started this coaching program, I was struggling with burnout and feeling isolated in my role. The coaching provided me with practical tools to address these challenges and achieve my goals of better work-life balance and improved leadership skills. I'm now a more effective pastor and have a better relationship with my congregation and family. I highly recommend this program to any pastor facing similar challenges.";
-        impact = "Transformed my approach to ministry and restored my passion for serving.";
-      } else if (outcomeType === 'neutral') {
-        rating = 3;
-        text = "The coaching program had some helpful elements, but didn't fully address my challenges.";
-        fullReview = "I entered this coaching program hoping to find solutions for my burnout and leadership challenges. While some aspects of the program were helpful, I found that many of the strategies weren't tailored to my specific situation. I've made some progress in certain areas, but still struggle with the same issues in others. The program might be more beneficial for pastors in different circumstances.";
-        impact = "Provided some useful tools but didn't fully resolve my ministry challenges.";
-      } else {
-        rating = Math.floor(Math.random() * 2) + 1; // 1 or 2
-        text = "This coaching program didn't address my needs and left me feeling more frustrated.";
-        fullReview = "I was hopeful that this coaching program would help me navigate the challenges I was facing in my ministry, particularly with burnout and conflict resolution. Unfortunately, the program seemed disconnected from the real-world issues pastors face. The strategies suggested were too theoretical and didn't translate well to my specific context. I'm still struggling with the same issues and now feel even more isolated. I would not recommend this program to other pastors facing similar challenges.";
-        impact = "Added to my stress rather than alleviating it.";
-      }
-      
-      return {
-        rating,
-        text,
-        fullReview,
-        impact
-      };
+      // Return null instead of generating fallback data
+      return null;
     }
   } catch (error) {
     console.error('Error generating review:', error);
     
-    // Create a fallback review
-    let rating = 5;
-    let text = '';
-    let fullReview = '';
-    let impact = '';
-    
-    if (outcomeType === 'positive') {
-      rating = Math.floor(Math.random() * 2) + 4; // 4 or 5
-      text = "This coaching program transformed my ministry and helped me overcome burnout.";
-      fullReview = "When I started this coaching program, I was struggling with burnout and feeling isolated in my role. The coaching provided me with practical tools to address these challenges and achieve my goals of better work-life balance and improved leadership skills. I'm now a more effective pastor and have a better relationship with my congregation and family. I highly recommend this program to any pastor facing similar challenges.";
-      impact = "Transformed my approach to ministry and restored my passion for serving.";
-    } else if (outcomeType === 'neutral') {
-      rating = 3;
-      text = "The coaching program had some helpful elements, but didn't fully address my challenges.";
-      fullReview = "I entered this coaching program hoping to find solutions for my burnout and leadership challenges. While some aspects of the program were helpful, I found that many of the strategies weren't tailored to my specific situation. I've made some progress in certain areas, but still struggle with the same issues in others. The program might be more beneficial for pastors in different circumstances.";
-      impact = "Provided some useful tools but didn't fully resolve my ministry challenges.";
-    } else {
-      rating = Math.floor(Math.random() * 2) + 1; // 1 or 2
-      text = "This coaching program didn't address my needs and left me feeling more frustrated.";
-      fullReview = "I was hopeful that this coaching program would help me navigate the challenges I was facing in my ministry, particularly with burnout and conflict resolution. Unfortunately, the program seemed disconnected from the real-world issues pastors face. The strategies suggested were too theoretical and didn't translate well to my specific context. I'm still struggling with the same issues and now feel even more isolated. I would not recommend this program to other pastors facing similar challenges.";
-      impact = "Added to my stress rather than alleviating it.";
-    }
-    
-    return {
-      rating,
-      text,
-      fullReview,
-      impact
-    };
+    // Return null instead of generating fallback data
+    return null;
   }
 }
 
@@ -660,7 +518,8 @@ export async function createSyntheticSession(programId, beneficiaryProfile) {
     const program = await prisma.program.findUnique({
       where: { id: programId },
       include: {
-        milestones: true
+        milestones: true,
+        funds: true // Include the funds associated with this program
       }
     });
     
@@ -669,6 +528,22 @@ export async function createSyntheticSession(programId, beneficiaryProfile) {
     }
     
     console.log(`Found program: ${program.name}`);
+    
+    // Get the fund ID from the program's associated funds
+    let fundId = 1; // Default fallback
+    if (program.funds && program.funds.length > 0) {
+      fundId = program.funds[0].id;
+      console.log(`Using fund ID ${fundId} from program's associated funds`);
+    } else {
+      // If no funds are associated with the program, find any fund
+      const anyFund = await prisma.fund.findFirst();
+      if (anyFund) {
+        fundId = anyFund.id;
+        console.log(`No funds associated with program. Using fund ID ${fundId} from database`);
+      } else {
+        console.log(`No funds found in database. Using default fund ID ${fundId}`);
+      }
+    }
     
     // Get the pre and post surveys for this program
     const preSurvey = await prisma.survey.findFirst({
@@ -707,8 +582,8 @@ export async function createSyntheticSession(programId, beneficiaryProfile) {
     
     // Determine outcome type (positive, neutral, negative)
     // This will influence the tone of the responses and the rating
-    console.log(`Found pre-survey: ${preSurvey.id}`);
-    console.log(`Found post-survey: ${postSurvey.id}`);
+    console.log(`Found pre-survey: ${preSurvey?.id}`);
+    console.log(`Found post-survey: ${postSurvey?.id}`);
     
     // Determine the outcome type (positive, neutral, negative)
     // 70% positive, 20% neutral, 10% negative
@@ -734,7 +609,7 @@ export async function createSyntheticSession(programId, beneficiaryProfile) {
     console.log('Generating pre-survey responses...');
     let preSurveyResponses = [];
     if (preSurvey) {
-      preSurveyResponses = await generatePreSurveyResponses(preSurvey.id, beneficiaryProfile);
+      preSurveyResponses = await generatePreSurveyResponses(preSurvey.id, beneficiaryProfile, program.name, program.description);
     }
     
     // Generate milestone reflections
@@ -750,14 +625,16 @@ export async function createSyntheticSession(programId, beneficiaryProfile) {
     
     // Generate a review
     console.log('Generating review...');
-    const review = await generateReview(beneficiaryProfile, outcomeType);
+    const review = await generateReview(beneficiaryProfile, program.name, program.description, outcomeType);
     
     // Create the session data
     const sessionData = {
       beneficiaryProfile,
       programId,
-      fundId: 19, // Use a valid fund ID
+      fundId, // Use the fund ID we determined above
       userId: beneficiaryProfile.id,
+      preSurveyId: preSurvey?.id || 1, // Include the pre-survey ID
+      postSurveyId: postSurvey?.id || 2, // Include the post-survey ID
       applicationResponses,
       preSurveyResponses,
       milestoneReflections,

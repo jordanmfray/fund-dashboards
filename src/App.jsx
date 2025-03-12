@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Routes, Route, Link, useNavigate, useParams } from 'react-router-dom';
-import { Container, Flex, Box, Text, Heading, Link as RadixLink, Card, Badge, Avatar, Grid, Button, Strong, Code, Separator, TextArea, TextField } from '@radix-ui/themes';
+import { Container, Flex, Box, Text, Heading, Link as RadixLink, Card, Badge, Avatar, Grid, Button, Strong, Code, Separator, TextArea, TextField, Select, Tabs, ScrollArea } from '@radix-ui/themes';
 
 // Home page - now displays recent funds from the database
 function Home() {
@@ -241,7 +241,7 @@ function FundDetail() {
                 {fund.sessions.map(session => (
                   <Card key={session.id}>
                     <Box p="3">
-                      <Heading size="3" mb="1">{session.title}</Heading>
+                      <Heading size="3" mb="1">Session #{session.id}</Heading>
                       <Flex gap="2" mb="2">
                         <Badge variant="soft">{session.status}</Badge>
                         <Text size="1" color="gray">User: {session.userName}</Text>
@@ -301,7 +301,7 @@ function Sessions() {
             <Card key={session.id}>
               <Link to={`/sessions/${session.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
                 <Flex direction="column" p="4">
-                  <Heading size="4" mb="2">{session.title}</Heading>
+                  <Heading size="4" mb="2">Session #{session.id}</Heading>
                   <Text color="gray" size="2" mb="3">{session.description}</Text>
                   <Flex justify="between" align="center">
                     <Text size="1" color="gray">Date: {new Date(session.date).toLocaleDateString()}</Text>
@@ -395,7 +395,7 @@ function SessionDetail() {
     <Container size="3">
       <Card>
         <Flex direction="column" p="6" gap="4">
-          <Heading size="6">{session.title}</Heading>
+          <Heading size="6">Session #{session.id}</Heading>
           
           <Flex align="center" gap="2">
             <Text size="2" color="gray">
@@ -502,6 +502,343 @@ function SessionDetail() {
   );
 }
 
+// Single Program component
+function ProgramDetail() {
+  const { id } = useParams();
+  const [program, setProgram] = useState(null);
+  const [funds, setFunds] = useState([]);
+  const [selectedFundId, setSelectedFundId] = useState('');
+  const [sessionCount, setSessionCount] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
+  const [error, setError] = useState(null);
+  const [logs, setLogs] = useState([]);
+  const [generationComplete, setGenerationComplete] = useState(false);
+
+  useEffect(() => {
+    async function fetchProgramAndFunds() {
+      try {
+        // Fetch program details
+        const programResponse = await fetch(`/api/programs/${id}`);
+        if (!programResponse.ok) {
+          throw new Error('Program not found');
+        }
+        const programData = await programResponse.json();
+        setProgram(programData);
+        
+        // Fetch all funds
+        const fundsResponse = await fetch('/api/funds');
+        const fundsData = await fundsResponse.json();
+        setFunds(fundsData);
+        
+        // Set default selected fund if program has associated funds
+        if (programData.funds && programData.funds.length > 0) {
+          setSelectedFundId(programData.funds[0].id.toString());
+        } else if (fundsData.length > 0) {
+          setSelectedFundId(fundsData[0].id.toString());
+        }
+        
+        setLoading(false);
+      } catch (err) {
+        setError(err.message);
+        setLoading(false);
+      }
+    }
+
+    fetchProgramAndFunds();
+  }, [id]);
+
+  const generateSessions = async () => {
+    if (!selectedFundId) {
+      setError('Please select a fund');
+      return;
+    }
+
+    setGenerating(true);
+    setLogs([]);
+    setGenerationComplete(false);
+    setError(null);
+
+    try {
+      // Create EventSource for server-sent events to get real-time updates
+      const eventSource = new EventSource(`/api/programs/${id}/generate-sessions?fundId=${selectedFundId}&count=${sessionCount}`);
+      
+      eventSource.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        
+        if (data.type === 'log') {
+          setLogs(prevLogs => [...prevLogs, data.message]);
+        } else if (data.type === 'complete') {
+          setGenerationComplete(true);
+          eventSource.close();
+        } else if (data.type === 'error') {
+          setError(data.message);
+          eventSource.close();
+        }
+      };
+      
+      eventSource.onerror = () => {
+        setError('Connection to server lost');
+        eventSource.close();
+        setGenerating(false);
+      };
+      
+    } catch (err) {
+      setError(err.message);
+      setGenerating(false);
+    }
+  };
+
+  if (loading) return (
+    <Container size="3">
+      <Box py="8" textAlign="center">
+        <Text>Loading program details...</Text>
+      </Box>
+    </Container>
+  );
+
+  if (error && !program) return (
+    <Container size="3">
+      <Box py="8" textAlign="center">
+        <Heading size="5" mb="4" color="red">Error</Heading>
+        <Text>{error}</Text>
+        <Box mt="6">
+          <Link to="/programs">
+            <Button variant="soft">Back to Programs</Button>
+          </Link>
+        </Box>
+      </Box>
+    </Container>
+  );
+
+  return (
+    <Container size="3">
+      <Card>
+        <Flex direction="column" p="6" gap="4">
+          <Heading size="6">{program.name}</Heading>
+          
+          <Text size="3">{program.description}</Text>
+          
+          <Separator size="4" my="2" />
+          
+          <Tabs.Root defaultValue="details">
+            <Tabs.List>
+              <Tabs.Trigger value="details">Program Details</Tabs.Trigger>
+              <Tabs.Trigger value="generate">Generate Sessions</Tabs.Trigger>
+            </Tabs.List>
+            
+            <Box pt="3">
+              <Tabs.Content value="details">
+                <Box>
+                  <Heading size="4" mb="3">Milestones</Heading>
+                  {program.milestones.length > 0 ? (
+                    <Grid columns="1" gap="3">
+                      {program.milestones.map(milestone => (
+                        <Card key={milestone.id}>
+                          <Box p="3">
+                            <Heading size="3" mb="2">{milestone.title}</Heading>
+                            <Text size="2">{milestone.description}</Text>
+                          </Box>
+                        </Card>
+                      ))}
+                    </Grid>
+                  ) : (
+                    <Text color="gray">No milestones found for this program.</Text>
+                  )}
+                  
+                  <Heading size="4" mt="5" mb="3">Surveys</Heading>
+                  {program.surveys.length > 0 ? (
+                    <Grid columns="1" gap="3">
+                      {program.surveys.map(survey => (
+                        <Card key={survey.id}>
+                          <Box p="3">
+                            <Heading size="3" mb="2">{survey.title}</Heading>
+                            <Text size="2">{survey.description}</Text>
+                            <Badge variant="soft" mt="2">{survey.type}</Badge>
+                          </Box>
+                        </Card>
+                      ))}
+                    </Grid>
+                  ) : (
+                    <Text color="gray">No surveys found for this program.</Text>
+                  )}
+                  
+                  <Heading size="4" mt="5" mb="3">Associated Funds</Heading>
+                  {program.funds.length > 0 ? (
+                    <Grid columns="1" gap="3">
+                      {program.funds.map(fund => (
+                        <Card key={fund.id}>
+                          <Box p="3">
+                            <Heading size="3" mb="2">{fund.name}</Heading>
+                            <Text size="2">{fund.description.substring(0, 150)}...</Text>
+                            <Text size="2" color="blue" mt="2">${fund.totalAmount.toLocaleString()}</Text>
+                          </Box>
+                        </Card>
+                      ))}
+                    </Grid>
+                  ) : (
+                    <Text color="gray">No funds associated with this program.</Text>
+                  )}
+                </Box>
+              </Tabs.Content>
+              
+              <Tabs.Content value="generate">
+                <Box>
+                  <Heading size="4" mb="3">Generate Sessions</Heading>
+                  
+                  {error && (
+                    <Box p="4" style={{ backgroundColor: 'var(--red-2)', borderLeft: '4px solid var(--red-9)', marginBottom: '16px' }}>
+                      <Text color="red">{error}</Text>
+                    </Box>
+                  )}
+                  
+                  <Card>
+                    <Box p="4">
+                      <Flex direction="column" gap="4">
+                        <Box>
+                          <Text as="label" size="2" mb="1" display="block">Select Fund</Text>
+                          <Select.Root 
+                            value={selectedFundId} 
+                            onValueChange={setSelectedFundId}
+                            disabled={generating}
+                          >
+                            <Select.Trigger placeholder="Select a fund" />
+                            <Select.Content>
+                              {funds.map(fund => (
+                                <Select.Item key={fund.id} value={fund.id.toString()}>
+                                  {fund.name}
+                                </Select.Item>
+                              ))}
+                            </Select.Content>
+                          </Select.Root>
+                        </Box>
+                        
+                        <Box>
+                          <Text as="label" size="2" mb="1" display="block">Number of Sessions</Text>
+                          <Flex gap="2" align="center">
+                            <TextField.Root 
+                              type="number" 
+                              value={sessionCount} 
+                              onChange={e => setSessionCount(Math.max(1, parseInt(e.target.value) || 1))}
+                              disabled={generating}
+                            />
+                            <Flex gap="1">
+                              <Button 
+                                variant="soft" 
+                                onClick={() => setSessionCount(prev => Math.max(1, prev - 1))}
+                                disabled={sessionCount <= 1 || generating}
+                              >
+                                -
+                              </Button>
+                              <Button 
+                                variant="soft" 
+                                onClick={() => setSessionCount(prev => prev + 1)}
+                                disabled={generating}
+                              >
+                                +
+                              </Button>
+                            </Flex>
+                          </Flex>
+                        </Box>
+                        
+                        <Button 
+                          onClick={generateSessions} 
+                          disabled={generating || !selectedFundId}
+                          color="blue"
+                        >
+                          {generating ? 'Generating...' : 'Generate Sessions'}
+                        </Button>
+                      </Flex>
+                    </Box>
+                  </Card>
+                  
+                  {(generating || logs.length > 0) && (
+                    <Box mt="4">
+                      <Heading size="4" mb="3">Generation Progress</Heading>
+                      <Card>
+                        <Box p="4">
+                          <ScrollArea style={{ height: '300px' }} scrollbars="vertical">
+                            <Box style={{ fontFamily: 'monospace', whiteSpace: 'pre-wrap', fontSize: '14px' }}>
+                              {logs.map((log, index) => (
+                                <Text key={index} mb="1">{log}</Text>
+                              ))}
+                              {generating && !generationComplete && (
+                                <Text color="blue">Processing...</Text>
+                              )}
+                              {generationComplete && (
+                                <Text color="green" weight="bold">Generation complete!</Text>
+                              )}
+                            </Box>
+                          </ScrollArea>
+                        </Box>
+                      </Card>
+                    </Box>
+                  )}
+                </Box>
+              </Tabs.Content>
+            </Box>
+          </Tabs.Root>
+          
+          <Flex justify="end" mt="4">
+            <Link to="/programs">
+              <Button variant="soft">Back to Programs</Button>
+            </Link>
+          </Flex>
+        </Flex>
+      </Card>
+    </Container>
+  );
+}
+
+// Programs component to display all programs
+function Programs() {
+  const [programs, setPrograms] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchPrograms() {
+      try {
+        const response = await fetch('/api/programs');
+        const data = await response.json();
+        setPrograms(data);
+        setLoading(false);
+      } catch (error) {
+        console.error('Error fetching programs:', error);
+        setLoading(false);
+      }
+    }
+
+    fetchPrograms();
+  }, []);
+
+  return (
+    <Container size="4">
+      <Heading size="6" mb="4">All Programs</Heading>
+      
+      {loading ? (
+        <Text>Loading programs...</Text>
+      ) : (
+        <Grid columns={{ initial: '1', md: '2' }} gap="4">
+          {programs.map(program => (
+            <Card key={program.id}>
+              <Link to={`/programs/${program.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+                <Flex direction="column" p="4">
+                  <Heading size="4" mb="2">{program.name}</Heading>
+                  <Text color="gray" size="2" mb="3">{program.description.substring(0, 150)}...</Text>
+                  <Flex justify="between" align="center">
+                    <Text size="2" color="gray">Milestones: {program.milestoneCount}</Text>
+                    <Text size="2" color="gray">Surveys: {program.surveyCount}</Text>
+                  </Flex>
+                </Flex>
+              </Link>
+            </Card>
+          ))}
+        </Grid>
+      )}
+    </Container>
+  );
+}
+
 function App() {
   return (
     <Flex direction="column" style={{ minHeight: '100vh' }}>
@@ -519,6 +856,9 @@ function App() {
                 <Link to="/funds" style={{ textDecoration: 'none', color: 'var(--gray-12)' }}>
                   <Text>Funds</Text>
                 </Link>
+                <Link to="/programs" style={{ textDecoration: 'none', color: 'var(--gray-12)' }}>
+                  <Text>Programs</Text>
+                </Link>
                 <Link to="/sessions" style={{ textDecoration: 'none', color: 'var(--gray-12)' }}>
                   <Text>Sessions</Text>
                 </Link>
@@ -533,6 +873,8 @@ function App() {
           <Route path="/" element={<Home />} />
           <Route path="/funds" element={<Funds />} />
           <Route path="/funds/:id" element={<FundDetail />} />
+          <Route path="/programs" element={<Programs />} />
+          <Route path="/programs/:id" element={<ProgramDetail />} />
           <Route path="/sessions" element={<Sessions />} />
           <Route path="/sessions/:id" element={<SessionDetail />} />
         </Routes>

@@ -8,14 +8,17 @@ const prisma = new PrismaClient();
 
 /**
  * Creates a session in the database from synthetic session data
+ * @param {Object} sessionData - The synthetic session data
+ * @param {number} [overrideFundId] - Optional fund ID to override the one in sessionData
+ * @returns {Promise<number>} - The ID of the created session
  */
-export async function createSessionInDatabase(sessionData) {
+export async function createSessionInDatabase(sessionData, overrideFundId = null) {
   try {
     // Extract data from the session data
     const { 
       beneficiaryProfile, 
       programId, 
-      fundId, 
+      fundId: sessionFundId, 
       userId,
       applicationResponses,
       preSurveyResponses,
@@ -24,16 +27,28 @@ export async function createSessionInDatabase(sessionData) {
       review
     } = sessionData;
 
+    // Use the override fund ID if provided, otherwise use the one from sessionData
+    const fundId = overrideFundId || sessionFundId;
+
     // Extract the name from the beneficiary profile
-    const pastorName = beneficiaryProfile?.pastorProfile?.name || 'Pastor';
+    const userName = beneficiaryProfile?.firstName && beneficiaryProfile?.lastName 
+      ? `${beneficiaryProfile.firstName} ${beneficiaryProfile.lastName}`
+      : 'User';
 
     console.log(`Creating session for user ${userId} in program ${programId}...`);
 
     // Create a new user for this session to avoid unique constraint issues
     const newUser = await prisma.user.create({
       data: {
-        name: `${pastorName} (Synthetic)`,
-        profile: beneficiaryProfile
+        name: userName,
+        age: beneficiaryProfile?.age || null,
+        jobTitle: beneficiaryProfile?.jobTitle || null,
+        yearsInJob: beneficiaryProfile?.yearsInJob || null,
+        income: beneficiaryProfile?.income || null,
+        maritalStatus: beneficiaryProfile?.maritalStatus || null,
+        numberOfChildren: beneficiaryProfile?.numberOfChildren || null,
+        currentChallenges: beneficiaryProfile?.currentChallenges || [],
+        hopefulOutcomes: beneficiaryProfile?.hopefulOutcomes || []
       }
     });
     
@@ -49,7 +64,7 @@ export async function createSessionInDatabase(sessionData) {
         outcomeData: JSON.stringify({
           completedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(), // 1 day ago
           beneficiaryProfile: beneficiaryProfile,
-          pastorName: pastorName
+          pastorName: userName
         })
       }
     });
@@ -73,7 +88,7 @@ export async function createSessionInDatabase(sessionData) {
     if (preSurveyResponses && preSurveyResponses.length > 0) {
       const preSurvey = await prisma.surveyResponse.create({
         data: {
-          surveyId: sessionData.preSurveyId || 13, // Default to ID 13 if not provided
+          surveyId: sessionData.preSurveyId || 1, // Default to ID 1 if not provided
           sessionId: session.id,
           userId: newUser.id,
           completedAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // 30 days ago
@@ -90,7 +105,19 @@ export async function createSessionInDatabase(sessionData) {
 
     // Create milestone reflections if they exist
     if (milestoneReflections && milestoneReflections.length > 0) {
+      // Create a map to track which milestone IDs have been processed
+      const processedMilestoneIds = new Set();
+      
       for (const reflection of milestoneReflections) {
+        // Skip if we've already processed this milestone ID
+        if (processedMilestoneIds.has(reflection.milestoneId)) {
+          console.log(`Skipping duplicate milestone reflection for milestone ID ${reflection.milestoneId}`);
+          continue;
+        }
+        
+        // Add this milestone ID to the set of processed IDs
+        processedMilestoneIds.add(reflection.milestoneId);
+        
         const milestoneReflection = await prisma.milestoneReflection.create({
           data: {
             milestoneId: reflection.milestoneId,
@@ -108,7 +135,7 @@ export async function createSessionInDatabase(sessionData) {
     if (postSurveyResponses && postSurveyResponses.length > 0) {
       const postSurvey = await prisma.surveyResponse.create({
         data: {
-          surveyId: sessionData.postSurveyId || 14, // Default to ID 14 if not provided
+          surveyId: sessionData.postSurveyId || 2, // Default to ID 2 if not provided
           sessionId: session.id,
           userId: newUser.id,
           completedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000), // 1 day ago
