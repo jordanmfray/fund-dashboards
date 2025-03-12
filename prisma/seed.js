@@ -40,6 +40,48 @@ async function createProgram(programData, fundIds) {
     }
   }
   
+  // Create application questions if template exists
+  if (programData.applicationTemplate && programData.applicationTemplate.questions) {
+    console.log(`Creating ${programData.applicationTemplate.questions.length} application questions for program: ${program.name}`);
+    
+    for (let i = 0; i < programData.applicationTemplate.questions.length; i++) {
+      const questionData = programData.applicationTemplate.questions[i];
+      
+      // Determine question type based on responseType
+      let questionType;
+      switch (questionData.responseType) {
+        case 'short_text':
+          questionType = 'TEXT';
+          break;
+        case 'long_text':
+          questionType = 'TEXT';
+          break;
+        case 'multiple_choice':
+          questionType = 'MULTIPLE_CHOICE';
+          break;
+        case 'checkbox':
+          questionType = 'CHECKBOX';
+          break;
+        default:
+          questionType = 'TEXT';
+      }
+      
+      await prisma.question.create({
+        data: {
+          text: questionData.questionText,
+          type: questionType,
+          context: 'APPLICATION',
+          options: questionData.options || [],
+          required: true,
+          order: i + 1,
+          program: {
+            connect: { id: program.id }
+          }
+        }
+      });
+    }
+  }
+  
   return program;
 }
 
@@ -509,6 +551,7 @@ async function main() {
       data: {
         text: questionData.text,
         type: questionData.type,
+        context: 'SURVEY',
         options: questionData.options,
         required: questionData.required,
         order: questionData.order,
@@ -679,6 +722,7 @@ async function main() {
       data: {
         text: questionData.text,
         type: questionData.type,
+        context: 'SURVEY',
         options: questionData.options,
         required: questionData.required,
         order: questionData.order,

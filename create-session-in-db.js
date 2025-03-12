@@ -82,6 +82,81 @@ export async function createSessionInDatabase(sessionData, overrideFundId = null
         }
       });
       console.log(`Created application with ID ${application.id}`);
+      
+      // Get the application questions for this program
+      const applicationQuestions = await prisma.question.findMany({
+        where: {
+          programId: programId,
+          context: 'APPLICATION'
+        },
+        orderBy: {
+          order: 'asc'
+        }
+      });
+      
+      if (applicationQuestions.length > 0) {
+        console.log(`Found ${applicationQuestions.length} application questions for program ${programId}`);
+        
+        // Create question responses for each application response
+        for (const response of applicationResponses) {
+          // Try multiple strategies to match questions with responses
+          let matchingQuestion = null;
+          
+          // Strategy 1: If the response has a questionText property, try to match by text
+          if (response.questionText) {
+            matchingQuestion = applicationQuestions.find(q => 
+              q.text.toLowerCase().includes(response.questionText.toLowerCase()) ||
+              response.questionText.toLowerCase().includes(q.text.toLowerCase())
+            );
+            
+            if (matchingQuestion) {
+              console.log(`Matched question by text similarity`);
+            }
+          }
+          
+          // Strategy 2: If the response has a questionId property and it's a number, try to find by ID
+          if (!matchingQuestion && response.questionId && typeof response.questionId === 'number') {
+            // First try direct ID match
+            matchingQuestion = applicationQuestions.find(q => q.id === response.questionId);
+            
+            // If that fails, try matching by order
+            if (!matchingQuestion) {
+              matchingQuestion = applicationQuestions.find(q => q.order === response.questionId);
+            }
+            
+            if (matchingQuestion) {
+              console.log(`Matched question by ID or order`);
+            }
+          }
+          
+          // Strategy 3: Position-based matching as a fallback
+          if (!matchingQuestion) {
+            const responseIndex = applicationResponses.indexOf(response);
+            // If we have enough questions, use the same index, otherwise use modulo
+            const questionIndex = responseIndex % applicationQuestions.length;
+            matchingQuestion = applicationQuestions[questionIndex];
+            
+            if (matchingQuestion) {
+              console.log(`Matched question by position (index ${responseIndex} -> question index ${questionIndex})`);
+            }
+          }
+          
+          if (matchingQuestion) {
+            await prisma.questionResponse.create({
+              data: {
+                applicationId: application.id,
+                questionId: matchingQuestion.id,
+                answer: response.response
+              }
+            });
+            console.log(`Created question response for question ID ${matchingQuestion.id} (text: "${matchingQuestion.text.substring(0, 30)}...")`);
+          } else {
+            console.log(`Failed to find a matching question for response: ${JSON.stringify(response).substring(0, 100)}...`);
+          }
+        }
+      } else {
+        console.log(`No application questions found for program ${programId}`);
+      }
     }
 
     // Create pre-survey response if it exists
@@ -153,12 +228,45 @@ export async function createSessionInDatabase(sessionData, overrideFundId = null
     // Create rating and review if they exist
     if (review) {
       try {
+        // Determine the appropriate rating based on the review
+        let ratingScore;
+        if (review.rating && typeof review.rating === 'number' && review.rating >= 1 && review.rating <= 5) {
+          // Use the rating from the review if it's valid
+          ratingScore = review.rating;
+        } else {
+          // Fallback logic based on the review content
+          // Check for keywords in the review to determine sentiment
+          const reviewText = (review.fullReview || review.text || '').toLowerCase();
+          
+          if (reviewText.includes('excellent') || reviewText.includes('amazing') || 
+              reviewText.includes('outstanding') || reviewText.includes('wonderful')) {
+            ratingScore = 5; // Very positive
+          } else if (reviewText.includes('good') || reviewText.includes('helpful') || 
+                    reviewText.includes('positive') || reviewText.includes('recommend')) {
+            ratingScore = 4; // Positive
+          } else if (reviewText.includes('okay') || reviewText.includes('average') || 
+                    reviewText.includes('neutral') || reviewText.includes('mixed')) {
+            ratingScore = 3; // Neutral
+          } else if (reviewText.includes('disappointing') || reviewText.includes('mediocre') || 
+                    reviewText.includes('lacking')) {
+            ratingScore = 2; // Negative
+          } else if (reviewText.includes('terrible') || reviewText.includes('awful') || 
+                    reviewText.includes('waste') || reviewText.includes('poor')) {
+            ratingScore = 1; // Very negative
+          } else {
+            // Default to a positive rating if we can't determine sentiment
+            ratingScore = 4;
+          }
+        }
+        
+        console.log(`Creating rating with score: ${ratingScore}`);
+        
         // Create the rating
         const rating = await prisma.rating.create({
           data: {
             sessionId: session.id,
             userId: newUser.id,
-            score: review.rating || Math.floor(Math.random() * 2) + 4 // Random 4-5 rating
+            score: ratingScore
           }
         });
         console.log(`Created rating with ID ${rating.id}`);

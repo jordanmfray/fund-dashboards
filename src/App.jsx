@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Routes, Route, Link, useNavigate, useParams } from 'react-router-dom';
-import { Container, Flex, Box, Text, Heading, Link as RadixLink, Card, Badge, Avatar, Grid, Button, Strong, Code, Separator, TextArea, TextField, Select, Tabs, ScrollArea } from '@radix-ui/themes';
+import { Container, Flex, Box, Text, Heading, Link as RadixLink, Card, Badge, Avatar, Grid, Button, Strong, Code, Separator, TextArea, TextField, Select, Tabs, ScrollArea, Table } from '@radix-ui/themes';
 
 // Home page - now displays recent funds from the database
 function Home() {
@@ -272,16 +272,21 @@ function FundDetail() {
 function Sessions() {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     async function fetchSessions() {
       try {
         const response = await fetch('/api/sessions');
+        if (!response.ok) {
+          throw new Error(`HTTP error! Status: ${response.status}`);
+        }
         const data = await response.json();
         setSessions(data);
         setLoading(false);
       } catch (error) {
         console.error('Error fetching sessions:', error);
+        setError(error.message);
         setLoading(false);
       }
     }
@@ -289,33 +294,111 @@ function Sessions() {
     fetchSessions();
   }, []);
 
+  // Helper function to format date
+  const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
+    return new Date(dateString).toLocaleDateString();
+  };
+
+  // Compact star rating for table view
+  const TableStarRating = ({ score }) => {
+    if (!score) return <Text color="gray">No rating</Text>;
+    return (
+      <Flex gap="1" align="center">
+        <Box style={{ color: 'var(--gold-9)', fontSize: '16px' }}>★</Box>
+        <Text size="2">{score}/5</Text>
+      </Flex>
+    );
+  };
+
   return (
     <Container size="4">
       <Heading size="6" mb="4">All Sessions</Heading>
       
+      {error && (
+        <Box p="4" style={{ backgroundColor: 'var(--red-2)', borderLeft: '4px solid var(--red-9)', marginBottom: '16px' }}>
+          <Text color="red">{error}</Text>
+        </Box>
+      )}
+      
       {loading ? (
         <Text>Loading sessions...</Text>
       ) : (
-        <Grid columns={{ initial: '1', md: '2' }} gap="4">
-          {sessions.map(session => (
-            <Card key={session.id}>
-              <Link to={`/sessions/${session.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
-                <Flex direction="column" p="4">
-                  <Heading size="4" mb="2">Session #{session.id}</Heading>
-                  <Text color="gray" size="2" mb="3">{session.description}</Text>
-                  <Flex justify="between" align="center">
-                    <Text size="1" color="gray">Date: {new Date(session.date).toLocaleDateString()}</Text>
-                    <Badge size="1">{session.fund.name}</Badge>
-                  </Flex>
-                </Flex>
-              </Link>
-            </Card>
-          ))}
-        </Grid>
+        <Box style={{ overflowX: 'auto' }}>
+          {sessions.length > 0 ? (
+            <Table.Root variant="surface">
+              <Table.Header>
+                <Table.Row>
+                  <Table.ColumnHeaderCell>Session ID</Table.ColumnHeaderCell>
+                  <Table.ColumnHeaderCell>Created At</Table.ColumnHeaderCell>
+                  <Table.ColumnHeaderCell>Program</Table.ColumnHeaderCell>
+                  <Table.ColumnHeaderCell>Fund</Table.ColumnHeaderCell>
+                  <Table.ColumnHeaderCell>User Name</Table.ColumnHeaderCell>
+                  <Table.ColumnHeaderCell>Status</Table.ColumnHeaderCell>
+                  <Table.ColumnHeaderCell>Rating</Table.ColumnHeaderCell>
+                  <Table.ColumnHeaderCell>Action</Table.ColumnHeaderCell>
+                </Table.Row>
+              </Table.Header>
+              <Table.Body>
+                {sessions.map(session => (
+                  <Table.Row key={session.id}>
+                    <Table.Cell>
+                      <Link to={`/sessions/${session.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+                        #{session.id}
+                      </Link>
+                    </Table.Cell>
+                    <Table.Cell>{formatDate(session.createdAt)}</Table.Cell>
+                    <Table.Cell>{session.program?.name || 'N/A'}</Table.Cell>
+                    <Table.Cell>{session.fund?.name || 'N/A'}</Table.Cell>
+                    <Table.Cell>{session.user?.name || 'N/A'}</Table.Cell>
+                    <Table.Cell>
+                      <Badge size="1" color={session.status === 'COMPLETED' ? 'green' : 'blue'}>
+                        {session.status === 'IN_PROGRESS' ? 'In Progress' : session.status}
+                      </Badge>
+                    </Table.Cell>
+                    <Table.Cell>
+                      <TableStarRating score={session.rating?.score} />
+                    </Table.Cell>
+                    <Table.Cell>
+                      <Link to={`/sessions/${session.id}`}>
+                        <Button variant="soft" size="1">View</Button>
+                      </Link>
+                    </Table.Cell>
+                  </Table.Row>
+                ))}
+              </Table.Body>
+            </Table.Root>
+          ) : (
+            <Text>No sessions available.</Text>
+          )}
+        </Box>
       )}
     </Container>
   );
 }
+
+// Helper function to render stars for ratings
+const StarRating = ({ score }) => {
+  const maxStars = 5;
+  // Ensure score is a number and default to 0 if undefined or null
+  const ratingScore = typeof score === 'number' ? score : 0;
+  
+  return (
+    <Flex gap="1">
+      {[...Array(maxStars)].map((_, index) => (
+        <Box 
+          key={index} 
+          style={{ 
+            color: index < ratingScore ? 'var(--gold-9)' : 'var(--gray-5)',
+            fontSize: '24px'
+          }}
+        >
+          ★
+        </Box>
+      ))}
+    </Flex>
+  );
+};
 
 // Single Session component
 function SessionDetail() {
@@ -334,6 +417,8 @@ function SessionDetail() {
           throw new Error('Session not found');
         }
         const data = await response.json();
+        console.log('Session data:', data);
+        console.log('Rating data:', data.rating);
         setSession(data);
         setLoading(false);
       } catch (err) {
@@ -391,105 +476,528 @@ function SessionDetail() {
     </Container>
   );
 
+  // Extract data from outcomeData or use an empty object if it doesn't exist
+  const sessionData = session.outcomeData || {};
+  const userProfile = session.user || {};
+
+  // Helper function to format date
+  const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
+    return new Date(dateString).toLocaleDateString();
+  };
+
+  // Helper function to render JSON data in a readable format
+  const renderJsonData = (data) => {
+    if (!data) return <Text color="gray">No data available</Text>;
+    
+    if (typeof data === 'object') {
+      return (
+        <Box p="3" style={{ backgroundColor: 'var(--gray-2)', borderRadius: 'var(--radius-2)', overflow: 'auto' }}>
+          <pre style={{ margin: 0, fontSize: '14px' }}>{JSON.stringify(data, null, 2)}</pre>
+        </Box>
+      );
+    }
+    
+    return <Text>{data.toString()}</Text>;
+  };
+
   return (
     <Container size="3">
       <Card>
         <Flex direction="column" p="6" gap="4">
-          <Heading size="6">Session #{session.id}</Heading>
-          
-          <Flex align="center" gap="2">
-            <Text size="2" color="gray">
-              Fund: {session.fund.name} | Date: {new Date(session.date).toLocaleDateString()}
-            </Text>
+          <Flex justify="between" align="center">
+            <Heading size="6">Session #{session.id}</Heading>
+            <Badge size="2" color={session.status === 'COMPLETED' ? 'green' : 'blue'}>
+              {session.status}
+            </Badge>
           </Flex>
+          <Text size="2" color="gray">
+            Fund: {session.fund.name}
+          </Text>
+          <Text size="2" color="gray">
+            Program: {session.program.name}
+          </Text>
+          <Text size="2" color="gray">
+            Created: {formatDate(session.createdAt)}
+          </Text>
+          
           
           <Separator size="4" my="2" />
           
-          <Text size="3">{session.description}</Text>
-          
-          <Box>
-            <Heading size="4" mb="3">Impact Data</Heading>
-            <Card>
-              <Box p="4">
-                {session.data.metrics && (
-                  <Box mb="4">
-                    <Heading size="3" mb="2">Metrics</Heading>
-                    <Grid columns={{ initial: '1', sm: '2' }} gap="3">
-                      {Object.entries(session.data.metrics).map(([key, value]) => (
-                        <Flex key={key} justify="between" p="2" style={{ backgroundColor: 'var(--gray-2)', borderRadius: 'var(--radius-2)' }}>
-                          <Text size="2">{key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}</Text>
-                          <Strong>{value.toLocaleString()}</Strong>
+          <Tabs.Root defaultValue="profile">
+            <Tabs.List>
+              <Tabs.Trigger value="profile">User Profile</Tabs.Trigger>
+              <Tabs.Trigger value="application">Application</Tabs.Trigger>
+              <Tabs.Trigger value="preSurvey">Pre-Survey</Tabs.Trigger>
+              <Tabs.Trigger value="milestones">Milestone Reflections</Tabs.Trigger>
+              <Tabs.Trigger value="postSurvey">Post-Survey</Tabs.Trigger>
+              <Tabs.Trigger value="feedback">Rating & Review</Tabs.Trigger>
+              <Tabs.Trigger value="data">Impact Data</Tabs.Trigger>
+              <Tabs.Trigger value="insights">AI Insights</Tabs.Trigger>
+            </Tabs.List>
+            
+            <Box pt="4">
+              {/* User Profile Tab */}
+              <Tabs.Content value="profile">
+                <Card>
+                  <Box p="4">
+                    <Heading size="4" mb="3">User Profile</Heading>
+                    
+                    <Box>
+                      <Heading size="3" mb="2">Basic Information</Heading>
+                      <Table.Root variant="surface">
+                        <Table.Body>
+                          <Table.Row>
+                            <Table.Cell style={{ fontWeight: 'bold' }}>Name</Table.Cell>
+                            <Table.Cell>{userProfile.name || 'N/A'}</Table.Cell>
+                          </Table.Row>
+                          <Table.Row>
+                            <Table.Cell style={{ fontWeight: 'bold' }}>Age</Table.Cell>
+                            <Table.Cell>{userProfile.age || 'N/A'}</Table.Cell>
+                          </Table.Row>
+                          <Table.Row>
+                            <Table.Cell style={{ fontWeight: 'bold' }}>Job Title</Table.Cell>
+                            <Table.Cell>{userProfile.jobTitle || 'N/A'}</Table.Cell>
+                          </Table.Row>
+                          <Table.Row>
+                            <Table.Cell style={{ fontWeight: 'bold' }}>Years in Job</Table.Cell>
+                            <Table.Cell>{userProfile.yearsInJob || 'N/A'}</Table.Cell>
+                          </Table.Row>
+                          <Table.Row>
+                            <Table.Cell style={{ fontWeight: 'bold' }}>Income</Table.Cell>
+                            <Table.Cell>{userProfile.income ? `$${userProfile.income.toLocaleString()}` : 'N/A'}</Table.Cell>
+                          </Table.Row>
+                          <Table.Row>
+                            <Table.Cell style={{ fontWeight: 'bold' }}>Marital Status</Table.Cell>
+                            <Table.Cell>{userProfile.maritalStatus || 'N/A'}</Table.Cell>
+                          </Table.Row>
+                          <Table.Row>
+                            <Table.Cell style={{ fontWeight: 'bold' }}>Number of Children</Table.Cell>
+                            <Table.Cell>{userProfile.numberOfChildren !== undefined ? userProfile.numberOfChildren : 'N/A'}</Table.Cell>
+                          </Table.Row>
+                        </Table.Body>
+                      </Table.Root>
+                    </Box>
+                  </Box>
+                      {userProfile.currentChallenges && userProfile.currentChallenges.length > 0 && (
+                        <Box mt="4" pl="4" pr="4">
+                            <Box mb="3">
+                              <Text size="2" weight="bold" mb="1">Current Challenges:</Text>
+                              <Box pl="3" asChild>
+                                <ul style={{ listStyleType: 'disc', margin: 8 }}>
+                                  {userProfile.currentChallenges.map((challenge, index) => (
+                                    <li key={index}><Text size="2">{challenge}</Text></li>
+                                  ))}
+                                </ul>
+                              </Box>
+                            </Box>
+                        </Box>
+                      )}
+                      
+                      {userProfile.hopefulOutcomes && userProfile.hopefulOutcomes.length > 0 && (
+                        <Box mt="4" pl="4" pr="4">
+                            <Box mb="3">
+                              <Text size="2" weight="bold" mb="1">Hopeful Outcomes:</Text>
+                              <Box pl="3" asChild>
+                                <ul style={{ listStyleType: 'disc', margin: 8 }}>
+                                  {userProfile.hopefulOutcomes.map((outcome, index) => (
+                                    <li key={index}><Text size="2">{outcome}</Text></li>
+                                  ))}
+                                </ul>
+                              </Box>
+                            </Box>
+                        </Box>
+                      )}
+                </Card>
+              </Tabs.Content>
+              
+              {/* Application Tab */}
+              <Tabs.Content value="application">
+                <Card>
+                  <Box p="4">
+                    <Heading size="4" mb="3">Application</Heading>
+                    {session.application ? (
+                      <Box>
+                        <Flex justify="between" align="center" mb="3">
+                          <Text size="2" color="gray">Submitted: {formatDate(session.application.submittedAt)}</Text>
+                          <Badge>{session.application.status}</Badge>
                         </Flex>
-                      ))}
-                    </Grid>
+                        <Heading size="3" mb="3">Responses</Heading>
+                        
+                        {session.application.questionResponses && session.application.questionResponses.length > 0 ? (
+                          <Grid columns="1" gap="4">
+                            {session.application.questionResponses.map(qr => (
+                              <Card key={qr.id}>
+                                <Box p="3">
+                                  <Heading size="4" mb="2" style={{ color: 'var(--blue-9)' }}>
+                                    {qr.question.text}
+                                  </Heading>
+                                  <Box p="3" style={{ backgroundColor: 'var(--gray-2)', borderRadius: 'var(--radius-2)' }}>
+                                    {Array.isArray(qr.answer) ? (
+                                      <Box pl="3" asChild>
+                                        <ul style={{ listStyleType: 'disc', margin: 0 }}>
+                                          {qr.answer.map((item, i) => (
+                                            <li key={i}><Text>{item}</Text></li>
+                                          ))}
+                                        </ul>
+                                      </Box>
+                                    ) : typeof qr.answer === 'object' && qr.answer !== null ? (
+                                      <pre style={{ margin: 0, fontSize: '14px' }}>{JSON.stringify(qr.answer, null, 2)}</pre>
+                                    ) : (
+                                      <Text>{qr.answer?.toString() || 'N/A'}</Text>
+                                    )}
+                                  </Box>
+                                </Box>
+                              </Card>
+                            ))}
+                          </Grid>
+                        ) : session.application.responses && Array.isArray(session.application.responses) ? (
+                          <Grid columns="1" gap="4">
+                            {session.application.responses.map((response, index) => {
+                              // Try to find a matching question from the program's application template
+                              let questionText = '';
+                              
+                              // If the program has an application template with questions
+                              if (session.program.applicationTemplate && 
+                                  session.program.applicationTemplate.questions && 
+                                  session.program.applicationTemplate.questions.length > 0) {
+                                
+                                // Try to find the question by index or questionId
+                                const questionIndex = response.questionId ? (response.questionId - 1) : index;
+                                const templateQuestion = session.program.applicationTemplate.questions[
+                                  questionIndex % session.program.applicationTemplate.questions.length
+                                ];
+                                
+                                if (templateQuestion) {
+                                  questionText = templateQuestion.questionText || templateQuestion.text || `Question ${index + 1}`;
+                                }
+                              }
+                              
+                              // If we couldn't find a question text, use a generic one or try to extract from the response
+                              if (!questionText) {
+                                if (response.questionText) {
+                                  questionText = response.questionText;
+                                } else if (response.questionId) {
+                                  questionText = `Question ${response.questionId}`;
+                                } else {
+                                  questionText = `Question ${index + 1}`;
+                                }
+                              }
+                              
+                              return (
+                                <Card key={index}>
+                                  <Box p="3">
+                                    <Heading size="4" mb="2" style={{ color: 'var(--blue-9)' }}>
+                                      {questionText}
+                                    </Heading>
+                                    <Box p="3" style={{ backgroundColor: 'var(--gray-2)', borderRadius: 'var(--radius-2)' }}>
+                                      {Array.isArray(response.response) ? (
+                                        <Box pl="3" asChild>
+                                          <ul style={{ listStyleType: 'disc', margin: 0 }}>
+                                            {response.response.map((item, i) => (
+                                              <li key={i}><Text>{item}</Text></li>
+                                            ))}
+                                          </ul>
+                                        </Box>
+                                      ) : typeof response.response === 'object' && response.response !== null ? (
+                                        <pre style={{ margin: 0, fontSize: '14px' }}>{JSON.stringify(response.response, null, 2)}</pre>
+                                      ) : (
+                                        <Text>{response.response?.toString() || 'N/A'}</Text>
+                                      )}
+                                    </Box>
+                                  </Box>
+                                </Card>
+                              );
+                            })}
+                          </Grid>
+                        ) : session.application.responses && typeof session.application.responses === 'object' && !Array.isArray(session.application.responses) ? (
+                          <Grid columns="1" gap="4">
+                            {Object.entries(session.application.responses).map(([key, value], index) => {
+                              // Format the question key to be more readable
+                              const questionText = key
+                                .replace(/([A-Z])/g, ' $1') // Add space before capital letters
+                                .replace(/^./, str => str.toUpperCase()) // Capitalize first letter
+                                .replace(/([a-z])([A-Z])/g, '$1 $2') // Add space between camelCase
+                                .replace(/_/g, ' '); // Replace underscores with spaces
+                              
+                              return (
+                                <Card key={index}>
+                                  <Box p="3">
+                                    <Heading size="4" mb="2" style={{ color: 'var(--blue-9)' }}>
+                                      {questionText}
+                                    </Heading>
+                                    <Box p="3" style={{ backgroundColor: 'var(--gray-2)', borderRadius: 'var(--radius-2)' }}>
+                                      {Array.isArray(value) ? (
+                                        <Box pl="3" asChild>
+                                          <ul style={{ listStyleType: 'disc', margin: 0 }}>
+                                            {value.map((item, i) => (
+                                              <li key={i}><Text>{item}</Text></li>
+                                            ))}
+                                          </ul>
+                                        </Box>
+                                      ) : typeof value === 'object' && value !== null ? (
+                                        <pre style={{ margin: 0, fontSize: '14px' }}>{JSON.stringify(value, null, 2)}</pre>
+                                      ) : (
+                                        <Text>{value?.toString() || 'N/A'}</Text>
+                                      )}
+                                    </Box>
+                                  </Box>
+                                </Card>
+                              );
+                            })}
+                          </Grid>
+                        ) : (
+                          <Text color="gray">No response data available</Text>
+                        )}
+                      </Box>
+                    ) : (
+                      <Text color="gray">No application data available</Text>
+                    )}
                   </Box>
-                )}
-                
-                {session.data.keyFindings && (
-                  <Box mb="4">
-                    <Heading size="3" mb="2">Key Findings</Heading>
-                    <Box pl="3" asChild>
-                      <ul style={{ listStyleType: 'disc' }}>
-                        {session.data.keyFindings.map((finding, index) => (
-                          <li key={index}><Text size="2">{finding}</Text></li>
+                </Card>
+              </Tabs.Content>
+              
+              {/* Pre-Survey Tab */}
+              <Tabs.Content value="preSurvey">
+                <Card>
+                  <Box p="4">
+                    <Heading size="4" mb="3">Pre-Survey Responses</Heading>
+                    {session.surveyResponses && session.surveyResponses.length > 0 ? (
+                      session.surveyResponses
+                        .filter(sr => sr.survey.type === 'PRE')
+                        .map(surveyResponse => (
+                          <Box key={surveyResponse.id} mb="4">
+                            <Heading size="3" mb="2">{surveyResponse.survey.title}</Heading>
+                            <Text size="2" color="gray" mb="3">Completed: {formatDate(surveyResponse.completedAt)}</Text>
+                            
+                            {surveyResponse.questionResponses && surveyResponse.questionResponses.length > 0 ? (
+                              <Grid columns="1" gap="3">
+                                {surveyResponse.questionResponses.map(qr => (
+                                  <Card key={qr.id}>
+                                    <Box p="3">
+                                      <Text size="2" weight="bold" mb="2">{qr.question.text}</Text>
+                                      {renderJsonData(qr.answer)}
+                                    </Box>
+                                  </Card>
+                                ))}
+                              </Grid>
+                            ) : (
+                              <Text color="gray">No question responses available</Text>
+                            )}
+                          </Box>
+                        ))
+                    ) : (
+                      <Text color="gray">No pre-survey responses available</Text>
+                    )}
+                  </Box>
+                </Card>
+              </Tabs.Content>
+              
+              {/* Milestone Reflections Tab */}
+              <Tabs.Content value="milestones">
+                <Card>
+                  <Box p="4">
+                    <Heading size="4" mb="3">Milestone Reflections</Heading>
+                    {session.milestoneReflections && session.milestoneReflections.length > 0 ? (
+                      <Grid columns="1" gap="4">
+                        {session.milestoneReflections.map(reflection => (
+                          <Card key={reflection.id}>
+                            <Box p="3">
+                              <Heading size="3" mb="1">{reflection.milestone.title}</Heading>
+                              <Text size="2" color="gray" mb="3">Completed: {formatDate(reflection.completedAt)}</Text>
+                              <Text size="2" weight="bold" mb="1">Reflection:</Text>
+                              <Box p="3" style={{ backgroundColor: 'var(--gray-2)', borderRadius: 'var(--radius-2)' }}>
+                                <Text size="2">{reflection.content}</Text>
+                              </Box>
+                            </Box>
+                          </Card>
                         ))}
-                      </ul>
+                      </Grid>
+                    ) : (
+                      <Text color="gray">No milestone reflections available</Text>
+                    )}
+                  </Box>
+                </Card>
+              </Tabs.Content>
+              
+              {/* Post-Survey Tab */}
+              <Tabs.Content value="postSurvey">
+                <Card>
+                  <Box p="4">
+                    <Heading size="4" mb="3">Post-Survey Responses</Heading>
+                    {session.surveyResponses && session.surveyResponses.length > 0 ? (
+                      session.surveyResponses
+                        .filter(sr => sr.survey.type === 'POST')
+                        .map(surveyResponse => (
+                          <Box key={surveyResponse.id} mb="4">
+                            <Heading size="3" mb="2">{surveyResponse.survey.title}</Heading>
+                            <Text size="2" color="gray" mb="3">Completed: {formatDate(surveyResponse.completedAt)}</Text>
+                            
+                            {surveyResponse.questionResponses && surveyResponse.questionResponses.length > 0 ? (
+                              <Grid columns="1" gap="3">
+                                {surveyResponse.questionResponses.map(qr => (
+                                  <Card key={qr.id}>
+                                    <Box p="3">
+                                      <Text size="2" weight="bold" mb="2">{qr.question.text}</Text>
+                                      {renderJsonData(qr.answer)}
+                                    </Box>
+                                  </Card>
+                                ))}
+                              </Grid>
+                            ) : (
+                              <Text color="gray">No question responses available</Text>
+                            )}
+                          </Box>
+                        ))
+                    ) : (
+                      <Text color="gray">No post-survey responses available</Text>
+                    )}
+                  </Box>
+                </Card>
+              </Tabs.Content>
+              
+              {/* Rating & Review Tab */}
+              <Tabs.Content value="feedback">
+                <Card>
+                  <Box p="4">
+                    <Heading size="4" mb="3">Rating & Review</Heading>
+                    
+                    <Box>
+                      {console.log('Rating in tab:', session.rating)}
+                      {session.rating && session.rating.score ? (
+                        <Box mb="4" textAlign="center">
+                          <Heading size="3" mb="2">Rating</Heading>
+                          <Flex direction="column" align="center" gap="2">
+                            <StarRating score={session.rating.score} />
+                            <Text size="2" color="gray">
+                              {session.rating.score}/5 • Submitted: {formatDate(session.rating.createdAt)}
+                            </Text>
+                          </Flex>
+                        </Box>
+                      ) : (
+                        <Box mb="4" textAlign="center">
+                          <Heading size="3" mb="2">Rating</Heading>
+                          <Text color="gray">No rating available</Text>
+                        </Box>
+                      )}
+                      
+                      <Separator size="4" my="4" />
+                      
+                      <Box>
+                        <Heading size="3" mb="2">Review</Heading>
+                        {session.review ? (
+                          <Box>
+                            <Box p="4" style={{ backgroundColor: 'var(--gray-2)', borderRadius: 'var(--radius-2)' }}>
+                              <Text size="2">{session.review.content}</Text>
+                            </Box>
+                            <Text size="2" color="gray" mt="2">Submitted: {formatDate(session.review.createdAt)}</Text>
+                          </Box>
+                        ) : (
+                          <Text color="gray">No review available</Text>
+                        )}
+                      </Box>
                     </Box>
                   </Box>
-                )}
-                
-                {session.data.challenges && (
-                  <Box mb="4">
-                    <Heading size="3" mb="2">Challenges</Heading>
-                    <Box pl="3" asChild>
-                      <ul style={{ listStyleType: 'disc' }}>
-                        {session.data.challenges.map((challenge, index) => (
-                          <li key={index}><Text size="2">{challenge}</Text></li>
-                        ))}
-                      </ul>
+                </Card>
+              </Tabs.Content>
+              
+              {/* Impact Data Tab */}
+              <Tabs.Content value="data">
+                <Card>
+                  <Box p="4">
+                    <Heading size="4" mb="3">Impact Data</Heading>
+                    {sessionData.metrics && (
+                      <Box mb="4">
+                        <Heading size="3" mb="2">Metrics</Heading>
+                        <Grid columns={{ initial: '1', sm: '2' }} gap="3">
+                          {Object.entries(sessionData.metrics).map(([key, value]) => (
+                            <Flex key={key} justify="between" p="2" style={{ backgroundColor: 'var(--gray-2)', borderRadius: 'var(--radius-2)' }}>
+                              <Text size="2">{key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}</Text>
+                              <Strong>{value.toLocaleString()}</Strong>
+                            </Flex>
+                          ))}
+                        </Grid>
+                      </Box>
+                    )}
+                    
+                    {sessionData.keyFindings && (
+                      <Box mb="4">
+                        <Heading size="3" mb="2">Key Findings</Heading>
+                        <Box pl="3" asChild>
+                          <ul style={{ listStyleType: 'disc' }}>
+                            {sessionData.keyFindings.map((finding, index) => (
+                              <li key={index}><Text size="2">{finding}</Text></li>
+                            ))}
+                          </ul>
+                        </Box>
+                      </Box>
+                    )}
+                    
+                    {sessionData.challenges && (
+                      <Box mb="4">
+                        <Heading size="3" mb="2">Challenges</Heading>
+                        <Box pl="3" asChild>
+                          <ul style={{ listStyleType: 'disc' }}>
+                            {sessionData.challenges.map((challenge, index) => (
+                              <li key={index}><Text size="2">{challenge}</Text></li>
+                            ))}
+                          </ul>
+                        </Box>
+                      </Box>
+                    )}
+                    
+                    {sessionData.recommendations && (
+                      <Box mb="4">
+                        <Heading size="3" mb="2">Recommendations</Heading>
+                        <Box pl="3" asChild>
+                          <ul style={{ listStyleType: 'disc' }}>
+                            {sessionData.recommendations.map((recommendation, index) => (
+                              <li key={index}><Text size="2">{recommendation}</Text></li>
+                            ))}
+                          </ul>
+                        </Box>
+                      </Box>
+                    )}
+                    
+                    {/* Show raw outcomeData for debugging */}
+                    <Box mt="5">
+                      <Heading size="3" mb="2">Raw Outcome Data</Heading>
+                      {renderJsonData(session.outcomeData)}
                     </Box>
                   </Box>
-                )}
-                
-                {session.data.recommendations && (
-                  <Box mb="4">
-                    <Heading size="3" mb="2">Recommendations</Heading>
-                    <Box pl="3" asChild>
-                      <ul style={{ listStyleType: 'disc' }}>
-                        {session.data.recommendations.map((recommendation, index) => (
-                          <li key={index}><Text size="2">{recommendation}</Text></li>
-                        ))}
-                      </ul>
-                    </Box>
+                </Card>
+              </Tabs.Content>
+              
+              {/* AI Insights Tab */}
+              <Tabs.Content value="insights">
+                <Card>
+                  <Box p="4">
+                    <Heading size="4" mb="3">AI Insights</Heading>
+                    {insights ? (
+                      <Box p="4" style={{ 
+                        backgroundColor: 'var(--gray-2)', 
+                        borderRadius: 'var(--radius-3)',
+                        whiteSpace: 'pre-wrap'
+                      }}>
+                        <Text>{insights}</Text>
+                      </Box>
+                    ) : (
+                      <Flex direction="column" align="center" gap="3">
+                        <Text>Generate AI-powered insights based on this session's data</Text>
+                        <Button 
+                          onClick={generateInsights} 
+                          disabled={insightsLoading}
+                          color="purple"
+                        >
+                          {insightsLoading ? 'Generating...' : 'Generate Insights'}
+                        </Button>
+                      </Flex>
+                    )}
                   </Box>
-                )}
-              </Box>
-            </Card>
-          </Box>
-          
-          <Box mt="4">
-            <Heading size="4" mb="3">AI Insights</Heading>
-            {insights ? (
-              <Box p="4" style={{ 
-                backgroundColor: 'var(--gray-2)', 
-                borderRadius: 'var(--radius-3)',
-                whiteSpace: 'pre-wrap'
-              }}>
-                <Text>{insights}</Text>
-              </Box>
-            ) : (
-              <Flex direction="column" align="center" gap="3">
-                <Text>Generate AI-powered insights based on this session's data</Text>
-                <Button 
-                  onClick={generateInsights} 
-                  disabled={insightsLoading}
-                  color="purple"
-                >
-                  {insightsLoading ? 'Generating...' : 'Generate Insights'}
-                </Button>
-              </Flex>
-            )}
-          </Box>
+                </Card>
+              </Tabs.Content>
+            </Box>
+          </Tabs.Root>
           
           <Box mt="4">
             <Link to="/sessions">

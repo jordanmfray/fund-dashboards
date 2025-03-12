@@ -139,8 +139,8 @@ app.get('/api/sessions', async (req, res) => {
     // Transform the data for the frontend
     const transformedSessions = sessions.map(session => ({
       id: session.id,
-      description: session.description,
-      date: session.date,
+      description: session.outcomeData?.description || 'No description available',
+      date: session.createdAt,
       fund: {
         id: session.fund.id,
         name: session.fund.name
@@ -148,6 +148,10 @@ app.get('/api/sessions', async (req, res) => {
       user: {
         id: session.user.id,
         name: session.user.name
+      },
+      program: {
+        id: session.program.id,
+        name: session.program.name
       },
       createdAt: session.createdAt
     }));
@@ -174,10 +178,23 @@ app.get('/api/sessions/:id', async (req, res) => {
         },
         user: true,
         program: true,
-        application: true,
+        application: {
+          include: {
+            questionResponses: {
+              include: {
+                question: true
+              }
+            }
+          }
+        },
         surveyResponses: {
           include: {
-            survey: true
+            survey: true,
+            questionResponses: {
+              include: {
+                question: true
+              }
+            }
           }
         },
         milestoneReflections: {
@@ -185,12 +202,29 @@ app.get('/api/sessions/:id', async (req, res) => {
             milestone: true
           }
         },
+        rating: true,
         review: true
       }
     });
     
     if (!session) {
       return res.status(404).json({ error: 'Session not found' });
+    }
+    
+    // Debug logs
+    console.log('Session ID:', session.id);
+    console.log('Rating:', session.rating);
+    console.log('Review:', session.review);
+    
+    // Direct check for ratings
+    const directRating = await prisma.rating.findUnique({
+      where: { sessionId: parseInt(id) }
+    });
+    console.log('Direct rating query:', directRating);
+    
+    // If we have a direct rating but not in the session, add it
+    if (directRating && !session.rating) {
+      session.rating = directRating;
     }
     
     res.json(session);
@@ -227,7 +261,9 @@ app.post('/api/ai/generate-insights', async (req, res) => {
     const session = await prisma.session.findUnique({
       where: { id: parseInt(sessionId) },
       include: {
-        fund: true
+        fund: true,
+        program: true,
+        user: true
       }
     });
     
@@ -240,12 +276,14 @@ app.post('/api/ai/generate-insights', async (req, res) => {
       Generate insights based on the following impact data:
       
       Fund: ${session.fund.name}
+      Program: ${session.program.name}
+      User: ${session.user.name}
       Session ID: ${session.id}
-      Description: ${session.description}
-      Date: ${session.date}
+      Status: ${session.status}
+      Created: ${session.createdAt}
       
       Data:
-      ${JSON.stringify(session.data, null, 2)}
+      ${JSON.stringify(session.outcomeData || {}, null, 2)}
       
       Please provide:
       1. A summary of the key findings

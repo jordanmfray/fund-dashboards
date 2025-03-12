@@ -19,41 +19,70 @@ async function generateApplicationResponses(programId, beneficiaryProfile) {
     
     // Get the program with its application template
     const program = await prisma.program.findUnique({
-      where: { id: programId }
+      where: { id: programId },
+      include: {
+        questions: {
+          where: {
+            context: 'APPLICATION'
+          },
+          orderBy: {
+            order: 'asc'
+          }
+        }
+      }
     });
     
-    if (!program || !program.applicationTemplate) {
-      console.log('No application template found for this program');
+    if (!program) {
+      console.log('No program found with this ID');
       return [];
     }
     
-    // Parse the application template from JSON if needed
-    const applicationTemplate = typeof program.applicationTemplate === 'string' 
-      ? JSON.parse(program.applicationTemplate) 
-      : program.applicationTemplate;
+    // Check if we have application questions in the database
+    let questions = [];
     
-    // Create questions array from the application template
-    const questions = [];
-    
-    // Add some default questions if the template doesn't have any
-    if (!applicationTemplate.questions || applicationTemplate.questions.length === 0) {
+    if (program.questions && program.questions.length > 0) {
+      // Use questions from the database
+      console.log(`Found ${program.questions.length} application questions in the database`);
+      questions = program.questions.map(q => ({
+        id: q.order, // Use order as the ID for matching in create-session-in-db.js
+        text: q.text,
+        type: q.type,
+        options: q.options
+      }));
+    } else if (program.applicationTemplate) {
+      // Parse the application template from JSON if needed
+      const applicationTemplate = typeof program.applicationTemplate === 'string' 
+        ? JSON.parse(program.applicationTemplate) 
+        : program.applicationTemplate;
+      
+      // Add some default questions if the template doesn't have any
+      if (!applicationTemplate.questions || applicationTemplate.questions.length === 0) {
+        questions.push(
+          { id: 1, text: "Why are you seeking coaching at this time?" },
+          { id: 2, text: "What are the biggest challenges you're currently facing in your ministry?" },
+          { id: 3, text: "What are your primary goals for this coaching experience?" }
+        );
+      } else {
+        // Use the questions from the template
+        for (let i = 0; i < applicationTemplate.questions.length; i++) {
+          const q = applicationTemplate.questions[i];
+          questions.push({
+            id: i + 1, // Use 1-indexed order as the ID
+            text: q.text || q.questionText || `Question ${i + 1}`
+          });
+        }
+      }
+    } else {
+      // No questions found, use defaults
+      console.log('No application questions found, using defaults');
       questions.push(
         { id: 1, text: "Why are you seeking coaching at this time?" },
         { id: 2, text: "What are the biggest challenges you're currently facing in your ministry?" },
         { id: 3, text: "What are your primary goals for this coaching experience?" }
       );
-    } else {
-      // Use the questions from the template
-      for (let i = 0; i < applicationTemplate.questions.length; i++) {
-        const q = applicationTemplate.questions[i];
-        questions.push({
-          id: q.id || i + 1,
-          text: q.text || q.questionText || `Question ${i + 1}`
-        });
-      }
     }
     
-    console.log(`Found ${questions.length} application questions`);
+    console.log(`Using ${questions.length} application questions`);
     
     const prompt = `
 You are helping to generate realistic application responses for a person applying to a program called "${program.name}".
@@ -437,14 +466,14 @@ async function generateReview(beneficiaryProfile, programName, programDescriptio
     let ratingRange = '';
     let ratingValue = '';
     if (outcomeType === 'positive') {
-      ratingRange = 'between 4 and 5';
-      ratingValue = 'either 4 or 5';
+      ratingRange = 'exactly 5';
+      ratingValue = '5';
     } else if (outcomeType === 'neutral') {
-      ratingRange = 'exactly 3'; // Neutral outcomes should have a rating of exactly 3
-      ratingValue = '3';
+      ratingRange = 'exactly 4'; // Neutral outcomes should have a rating of 4
+      ratingValue = '4';
     } else if (outcomeType === 'negative') {
-      ratingRange = 'between 1 and 2';
-      ratingValue = 'either 1 or 2';
+      ratingRange = 'between 2 and 3';
+      ratingValue = 'either 2 or 3';
     }
     
     const prompt = `
